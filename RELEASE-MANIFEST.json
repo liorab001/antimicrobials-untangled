@@ -1,0 +1,19 @@
+{
+  "databaseVersion": "1.1.13",
+  "engineVersion": "1.0.7",
+  "baseCommit": "6d1928bd00f817d8e074e2eb3a0b1d4373e8a1c4",
+  "files": {
+    "index.html": "72bf0a5f20f13f3e0f18f042583b1ebb350d3da4a02e25070f9d605798a477e5",
+    "amu-engine.js": "f16b28d111dfb4f100c447901302a7e75b9654f93eae0bb7d75022533249cb6c",
+    "amu-ui.js": "ef964fba06425bbb771e9be1882b86c9aad0ef4d5c3b418180c687be960dfeaf",
+    "amu-integration.js": "464936ed29ca76b9a21f5d3dc869c8c2f4e7c3e29f6a7d5cf4f99095d8811da0",
+    "amu-database.json": "62df26ad454e6cb63df1fec284904b785131bb648d789b1143284ab9d0cbc268",
+    "PATCH-NOTES-1.1.13.md": "f69d056d3d3593129e5f4cb15cc7d2aa223401163de5d7745a62ef067e7ef952",
+    "VALIDATION-1.1.13.md": "29146704db8b26479fcd70f2a226f30140ae89ddb5746e2de0f3bb26c5748d73",
+    "tests/regression.cjs": "bde3a8eb539b9b7d3aa9260b489f341cd59ebe9369a8e9fc9dcf004bb90ae6ae",
+    "tests/browser-smoke.cjs": "3dd13d14aa5c6081bdd768da38fd8d6f0ff57d8dccfd4752ba5b52c1488efdef",
+    "tests/source-snapshots.json": "1e545ca93ab091d2880e19bf391f936d4dcb3cf41f8318bc09c1f6de96600663",
+    "tests/engine-results.json": "8031beddac5bf5ae29bd51c2557d66ccd1870277380c8dde908c6acff24caba4",
+    "tests/browser-results.json": "e639298afa62f2d22939e91a3e8eb5a1994a2c8c125579fd4a00beaf65f26167"
+  }
+}

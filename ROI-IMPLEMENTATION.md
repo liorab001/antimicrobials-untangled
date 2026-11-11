@@ -2,14 +2,7 @@
 
 ## Install
 
-Replace these **four application files together** in a working 1.1.14 application:
-
-- `index.html`
-- `amu-engine.js`
-- `amu-integration.js`
-- `amu-database.json`
-
-Keep the existing UI, treatment-guidance, resistance and feature-data modules. A complete application ZIP is also provided if earlier updates have not been installed. Hard-refresh after replacing the files. The database requires interpreter 1.1.0 and the new `roi/1` capability; an older engine cannot silently ignore the ROI stage.
+Use the **complete 1.2.1 bundle** and copy all eight application files together as listed in `INSTALL-1.2.1.md`, then hard-refresh. It includes the UI, resistance and feature-data dependencies. Treatment guidance is also embedded in the startup integration, so a missing standalone module does not prevent activation. The database remains 1.2.0 and requires interpreter 1.1.0 with the `roi/1` capability.
 
 ## Implemented sequence
 

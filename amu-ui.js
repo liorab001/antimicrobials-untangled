@@ -81,6 +81,8 @@
     }
 
     function isFormulationCompatibleWithSystemicInfection(drug) {
+      // A local product is eligible only for a specifically mapped presentation.
+      if (currentSearchLevel === 'PATHOGEN' && activePathogenProfile && firstLineKnowledge()?.allowsLocalProduct(activePathogenProfile.canonical, activeDiseaseFilterId, drug, AMUApp.patient(), drugMatchesCuratedAgent)) return true;
       const route = String(drug?.route || "").toLowerCase();
       const rawDosing = String(drug?.rawDosing || "").toLowerCase();
       const productText = `${route} ${drug?.genericName || ""} ${drug?.brandName || ""} ${rawDosing}`.toLowerCase();
@@ -149,6 +151,9 @@
       const preference=amuCuratedProductPreference(agentName);
       if(preference?.routes?.length&&!preference.routes.some(route=>clinicalPhrasePresent(drug.route||'',route)))return false;
       if(preference?.excludeFormulation&&new RegExp(preference.excludeFormulation,'i').test(`${drug.activeIngredientSource||''} ${drug.brandName||''}`))return false;
+      const product=[drug.activeIngredientSource,drug.genericName,drug.brandName,drug.dosageForm].join(' ');
+      if(preference?.productPatterns?.length&&!preference.productPatterns.some(pattern=>new RegExp(pattern,'i').test(product)))return false;
+      if(preference?.excludeProductPatterns?.some(pattern=>new RegExp(pattern,'i').test(product)))return false;
       if (curatedProductRequirement(agentName) !== "benzathine_im") return true;
       const formulation = `${drug.activeIngredientSource || ""} ${drug.genericName || ""} ${drug.brandName || ""}`;
       return /benzathine|bicillin\s*l.?a/i.test(formulation) && !/procaine|bicillin\s*c.?r/i.test(formulation)
@@ -157,7 +162,8 @@
 
     function amuCuratedProductPreference(agentName) {
       const key=currentSearchLevel==='PATHOGEN'?`${activePathogenProfile?.canonical||''}|${activeDiseaseFilterId}`:'';
-      return (AMUApp.database?.referenceCollections?.productPreferences?.records||[]).find(rule=>rule.contextKeys.includes(key)&&rule.drugNames.some(name=>canonicalizeClinicalIngredient(name)===canonicalizeClinicalIngredient(agentName)));
+      const explicit=(AMUApp.database?.referenceCollections?.productPreferences?.records||[]).find(rule=>rule.contextKeys.includes(key)&&rule.drugNames.some(name=>canonicalizeClinicalIngredient(name)===canonicalizeClinicalIngredient(agentName)));
+      return explicit || (currentSearchLevel==='PATHOGEN' && activePathogenProfile ? firstLineKnowledge()?.preference(activePathogenProfile.canonical,activeDiseaseFilterId,agentName,AMUApp.patient()) : null);
     }
 
     // Drug lookups must match the complete ingredient set. A label returned by a
@@ -3953,7 +3959,7 @@
     }
     function renderCurrentResults() {
       AMUApp.queueAnalysis(currentFetchedDrugs);
-      if (currentFetchedDrugs.length === 0) return;
+      if (currentFetchedDrugs.length === 0 && !(currentSearchLevel==='PATHOGEN' && activePathogenProfile && firstLineKnowledge()?.record(activePathogenProfile.canonical,activeDiseaseFilterId))) return;
       if (currentNihPillNames.length > 0) renderNihIngredientPills();
 
       const allergyState = getAllergyState();
@@ -3982,9 +3988,9 @@
       document.getElementById("drugCountBadge").textContent = `${eligibleCount} Safe / ${blockedDrawerDrugs.length} Allergy-Contraindicated`;
 
       if (visibleMainCards.length === 0) {
-        safeContainer.innerHTML = diseaseFilteredDrugs.length === 0
+        safeContainer.innerHTML = renderGuidelineChoices([], allergyState.renalFlag) + (diseaseFilteredDrugs.length === 0
           ? `<div class="bg-white p-8 rounded-xl border border-slate-200 text-center text-xs text-slate-500">No agents matched the current pathogen / presentation filter. Try another presentation, or select a drug in the NIH bar above.</div>`
-          : `<div class="bg-white p-8 rounded-xl border border-slate-200 text-center text-xs text-slate-500">All matching agents are contraindicated by your active allergy filters. Select any drug in the NIH bar above or in the Contraindicated list below to pin its data hub to the top of this list.</div>`;
+          : `<div class="bg-white p-8 rounded-xl border border-slate-200 text-center text-xs text-slate-500">All matching agents are contraindicated by your active allergy filters. Select any drug in the NIH bar above or in the Contraindicated list below to pin its data hub to the top of this list.</div>`);
       } else {
         safeContainer.innerHTML = renderWithCombos(visibleMainCards, allergyState.renalFlag);
       }
@@ -4567,7 +4573,48 @@
       if (ingredient === "Penicillin G" && /benzathine|procaine|bicillin/i.test(`${drug.activeIngredientSource || ""} ${drug.brandName || ""}`)) return false;
       return true;
     }
+    const firstLineKnowledgeCache = new WeakMap();
+    function firstLineKnowledge() {
+      const database=AMUApp.database;
+      if (!database?.referenceCollections?.firstLineGuidance || !globalThis.AMUTreatmentGuidance) return null;
+      if (!firstLineKnowledgeCache.has(database)) firstLineKnowledgeCache.set(database,AMUTreatmentGuidance.create(database));
+      return firstLineKnowledgeCache.get(database);
+    }
+    function activeGuidelineRecord() {
+      return currentSearchLevel==='PATHOGEN' && activePathogenProfile ? firstLineKnowledge()?.record(activePathogenProfile.canonical,activeDiseaseFilterId) : null;
+    }
+    function guidelineSourceLink(group) {
+      return group.source ? `<a class="underline font-semibold text-emerald-800" href="${esc(group.source.url)}" target="_blank" rel="noopener noreferrer">${esc(group.source.title)} ↗</a>` : '';
+    }
+    function guidelineAgentNames(group) {
+      return (group.agents||[]).map(agent=>`${agent.name}${agent.routes?.length?' ('+agent.routes.join(' / ').toLowerCase()+')':''}`).join(group.kind==='sequence'?' → ':group.kind==='combination'?' + ':'; ');
+    }
+    function renderGuidelineChoices(cards,renal) {
+      const entry=activeGuidelineRecord();
+      if (!entry) return '';
+      const knowledge=firstLineKnowledge(),pathogen=activePathogenProfile.canonical,patient=AMUApp.patient();
+      if (activeDiseaseFilterId==='all') {
+        return `<div class="space-y-3 mb-3" data-first-line-overview="true"><p class="text-xs text-slate-600">First-line treatment by infection. Select a presentation to see its treatment choices and product cards.</p>${knowledge.overview(pathogen,patient).map(item=>{
+          const preferred=item.groups.length>0;
+          return `<section data-guidance-context="${esc(pathogen+'|'+item.id)}" ${preferred?'data-first-line="true"':''} style="border:2px solid ${preferred?'#6ee7b7':'#cbd5e1'};border-radius:12px;padding:12px" class="${preferred?'bg-emerald-50/40':'bg-slate-50'}"><button type="button" class="text-left text-sm font-extrabold underline ${preferred?'text-emerald-900':'text-slate-800'}" onclick="selectPathogenDiseaseFilter('${jsArg(item.id)}')">${esc(item.label)}</button>${item.groups.map(group=>`<div class="mt-2 text-xs"><b>${esc(group.title)}</b>${group.agents?.length?`<p>${esc(guidelineAgentNames(group))}</p>`:''}${group.qualifier?`<p class="mt-1">${esc(group.qualifier)}</p>`:''}${group.externalCompanions?.length?`<p>Required additional components: ${esc(group.externalCompanions.join('; '))}</p>`:''}${guidelineSourceLink(group)}</div>`).join('')}${!preferred?`<p class="text-xs mt-1">${esc(item.entry?.note||'Guideline review required.')}</p>`:''}</section>`;
+        }).join('')}</div>`;
+      }
+      const plan=knowledge.plan(pathogen,activeDiseaseFilterId,patient,cards,drugMatchesCuratedAgent,d=>eligibleFirstLineCard(d,renal));
+      if (!plan.groups.length) {
+        const heading=['review_required','source_index'].includes(entry.status)?'Treatment selection requires a defined clinical branch':'No single standard first-line regimen for this view';
+        return `<div data-guidance-status="${esc(entry.status)}" class="mb-3 rounded-xl border border-slate-300 bg-slate-50 p-3 text-xs"><b>${esc(heading)}</b><p>${esc(entry.note)}</p>${(entry.sourceRefs||[]).map(id=>guidelineSourceLink({source:AMUApp.database.referenceCollections.firstLineGuidance.sources[id]})).join(' · ')}</div>` + plan.remaining.map(d=>renderDistilledDrugCard(d,renal)).join('');
+      }
+      return plan.groups.map(group=>{
+        const type=group.kind==='combination'?'Combination — required components':group.kind==='sequence'?'Sequential treatment — complete all stages':group.kind==='procedure'?'Primary management':'Options — choose an appropriate agent';
+        const missing=group.missing.length&&!group.choiceOnly?`<p data-missing-first-line-products="true" class="text-xs text-amber-900">No eligible retrieved product card is shown for: ${esc(group.missing.join(', '))}. The guideline choice remains listed; its dose and suitability require review.${['combination','sequence'].includes(group.kind)?' A displayed component alone is not the complete regimen.':''}</p>`:'';
+        return `<section data-first-line="true" data-first-line-group="${esc(group.id)}" data-guidance-context="${esc(pathogen+'|'+activeDiseaseFilterId)}" style="border:2px solid #6ee7b7;border-radius:12px;padding:12px" class="mb-3 bg-emerald-50/40 space-y-2"><div class="text-sm font-extrabold text-emerald-900">First-line · ${esc(group.title)}</div><div class="text-[11px] font-semibold text-emerald-900">${esc(type)}${group.conditional?' · Conditions apply':''}</div>${group.agents?.length?`<p class="text-xs font-semibold">${esc(guidelineAgentNames(group))}</p>`:''}${group.qualifier?`<p class="text-xs text-emerald-950">${esc(group.qualifier)}</p>`:''}<div class="text-[11px]">${guidelineSourceLink(group)}</div>${group.externalCompanions?.length?`<p class="text-xs font-semibold">Required additional components: ${esc(group.externalCompanions.join('; '))}</p>`:''}${missing}${group.shared.length?`<p class="text-xs">Shared component card shown in another first-line group: ${esc(group.shared.join(', '))}.</p>`:''}${group.members.map(d=>renderDistilledDrugCard(d,renal)).join('')}</section>`;
+      }).join('') + (plan.remaining.length?`<section class="space-y-2"><div class="text-xs font-bold text-slate-600">Other retrieved agents — role and source to review</div>${plan.remaining.map(d=>renderDistilledDrugCard(d,renal)).join('')}</section>`:'');
+    }
     function renderTopCards(cards, renal) {
+      if (activeGuidelineRecord()) {
+        const guidance=renderGuidelineChoices(cards,renal);
+        return activeDiseaseFilterId==='all'?guidance+cards.map(d=>renderDistilledDrugCard(d,renal)).join(''):guidance;
+      }
       const render = d => renderDistilledDrugCard(d, renal);
       const key = activeFirstLineContextKey();
       const c = FIRST_LINE_COMBOS[key];
@@ -4777,7 +4824,9 @@
       if (!clean.length && rel.length) html = `<div class="p-3 rounded-xl bg-amber-50 border border-amber-300 text-xs text-amber-950 font-semibold"><i class="fa-solid fa-triangle-exclamation mr-1"></i>No option without a contraindication for this profile — the least-restricted alternatives (relative contraindications) are listed first.</div>` + html;
       if (mini.length) html += `<div class="pt-3 mt-2 border-t border-slate-300 space-y-2"><h3 class="text-xs font-bold uppercase tracking-wider text-rose-700"><i class="fa-solid fa-ban mr-1"></i>Contraindicated for this profile — minimized (relative first, then absolute; click a row to expand)</h3>${mini.map(x => minimizedRow(x.d, renal, x.a)).join("")}</div>`;
       const activeKey = currentSearchLevel === "PATHOGEN" && activePathogenProfile ? `${activePathogenProfile.canonical}|${activeDiseaseFilterId}` : "";
-      if (activeKey && !FIRST_LINE_COMBOS[activeKey] && activeKey !== "Streptococcus pyogenes|pharyngitis") {
+      if (activeKey && activeGuidelineRecord()) {
+        html = `<div class="mb-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] text-emerald-950">Green frames identify guideline first-line choices for the named infection and stated conditions. Patient restrictions still apply. Each dose panel identifies its own source; treatment preference does not establish a matching label dose.</div>` + html;
+      } else if (activeKey && !FIRST_LINE_COMBOS[activeKey] && activeKey !== "Streptococcus pyogenes|pharyngitis") {
         html = `<div class="mb-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[10px] text-slate-600">Agent cards are filtered by the selected pathogen/presentation and patient contraindications. Card order is not a first-line ranking; an FDA-label dose match does not by itself establish comparative treatment preference.</div>` + html;
       }
       return html;

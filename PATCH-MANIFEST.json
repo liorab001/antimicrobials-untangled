@@ -1,0 +1,27 @@
+{
+  "databaseVersion": "1.2.0",
+  "engineVersion": "1.1.0",
+  "releaseDate": "2026-11-11",
+  "baseDatabaseVersion": "1.1.14",
+  "checksPassed": 143,
+  "files": {
+    "index.html": "7fd3e79dbf43a4fa6152d7b69afe015c81e250449f7520edfb08db48df01c314",
+    "amu-engine.js": "db9321c86466c392977f3a0164c24735d704dd6ab69014d8bc8fa3e36617d349",
+    "amu-integration.js": "6c4464fa09a0dd72d484b96072cd651907b31d6d5f09756d1f48dfefe06bf619",
+    "amu-database.json": "88fdf5bb7ccea8a2f31c8ba3f3195bd2776742c8b08e25074e3a68ee451ec973",
+    "CHANGELOG.md": "617cc82c45e62dfe8ceb4e73afb69c769b970369ab157c54ac0a799e272890b1",
+    "DATABASE-EXPANSION-PROMPT.md": "8018c705b154f711bcdfc5526c07bc0dc64a0ba4d5d7266e6db8fe215ace7767",
+    "README.md": "d839d77b4d0e90e08a48409e8b2c195bc0c332155bd8d7f63bf0b2964b805fdb",
+    "ROI-IMPLEMENTATION.md": "c5cad69163222ae30183a3a64ea43002462800327d190f11ec4c5e0a08b8cd2e",
+    "VALIDATION-1.2.0.md": "97745f2ef00981a58f70b1d761afd1a6c7d6bb321cfebf68b3619db0b2ebb6ae",
+    "tests/baseline-contract.json": "72e34e5b8b48f70a2a53d277ff3eccc25d75770baf53c597b6359b5f0af7c3df",
+    "tests/engine-results.json": "195d7cd175b1423d306c94522eb4cae124fa792e7daa3adef64ef578dcb781f8",
+    "tests/first-line-results.json": "23debd978a33cba0cb3db580dbc5b956ff3e1b94745e4fbcd36cdfadf9eca4c7",
+    "tests/first-line.cjs": "11d9265dd58c79d7448ce3f48fbeb7341c7caf47675fef0ccb09da3a7a08141d",
+    "tests/roi-browser-results.json": "b4f3c25b89fed294bf2f8dba67ed6721d691ed2932ddf098535756c8da9d430f",
+    "tests/roi-browser.cjs": "c013723208ac4cc168993098a5df95aac6524a5d064a072b172b068e7ac796ef",
+    "tests/roi-results.json": "88e9436b4a36f3f2ca4944e86097968033fe45453471390ea9d775ec712525ff",
+    "tests/roi.cjs": "4f007be825acd1fe63364ce33c85822040cbb9f7830fd613386ec3730fc6578f",
+    "tools/import-roi-patterns.cjs": "bf009736873129ccc4fa7910e1f9ab0d36380fed12035dff95d55d172e368343"
+  }
+}

@@ -65,8 +65,8 @@
             ${item.drugs.map(d => {
               const rawRate = d.rates?.[region];
               const rate = Number.isFinite(rawRate) && rawRate >= 0 && rawRate <= 100 ? rawRate : null;
-              let barColor = "bg-emerald-500";
-              let badgeColor = "bg-emerald-100 text-emerald-800 border-emerald-200";
+              let barColor = "bg-slate-500";
+              let badgeColor = "bg-slate-100 text-slate-700 border-slate-200";
               let clinicalLabel = `Illustrative figure below ${mediumThreshold}%. Not an official rate and not a susceptibility finding.`;
               if (rate !== null && rate >= highThreshold) {
                 barColor = "bg-rose-600";
@@ -109,7 +109,16 @@
     function europePmcLicenseDeed(raw) {
       const value = String(raw || "").trim();
       if (!value) return null;
-      if (/^https?:\/\//i.test(value)) return { label: "License link returned by Europe PMC", url: value };
+      if (/^https:\/\//i.test(value)) {
+        try {
+          const parsed = new URL(value);
+          const hosts = ["creativecommons.org", "europepmc.org", "doi.org", "www.ncbi.nlm.nih.gov"];
+          if (parsed.protocol === "https:" && hosts.some(host => parsed.hostname === host || parsed.hostname.endsWith("." + host))) {
+            return { label: "License link returned by Europe PMC", url: parsed.href };
+          }
+        } catch (e) { /* keep the license text and do not link an untrusted host */ }
+        return { label: value, url: "" };
+      }
       const statedVersion = (value.match(/\b(1\.0|2\.0|2\.5|3\.0|4\.0)\b/) || [])[1] || "";
       const token = value.toLowerCase().replace(/[_-]+/g, " ").replace(/\b(?:1\.0|2\.0|2\.5|3\.0|4\.0)\b/g, "").replace(/\s+/g, " ").trim();
       const families = {

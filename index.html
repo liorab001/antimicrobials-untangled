@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="form-action &#39;none&#39;; default-src &#39;self&#39; https: data: blob: &#39;unsafe-inline&#39; &#39;unsafe-eval&#39;; connect-src &#39;self&#39; https://api.fda.gov https://rxnav.nlm.nih.gov https://www.ebi.ac.uk; worker-src &#39;self&#39; blob:; object-src &#39;none&#39;; base-uri &#39;none&#39;">
+  <meta http-equiv="Content-Security-Policy" content="default-src &#39;self&#39;; script-src &#39;self&#39; &#39;unsafe-inline&#39;; style-src &#39;self&#39; &#39;unsafe-inline&#39; https://cdnjs.cloudflare.com; font-src https://cdnjs.cloudflare.com data:; img-src &#39;self&#39; data:; connect-src &#39;self&#39; https://api.fda.gov https://rxnav.nlm.nih.gov https://www.ebi.ac.uk; worker-src &#39;self&#39; blob:; object-src &#39;none&#39;; base-uri &#39;none&#39;; form-action &#39;none&#39;">
   <title>Antimicrobials Untangled v1.18 — Modular Prototype</title>
   <link rel="stylesheet" href="./amu-styles.css?v=20261110">
   <link rel="preload" href="./amu-ui.js?v=20261112-label-fetch" as="script">
@@ -130,11 +130,12 @@
           <p>The developer runs no backend server, sets no cookies, and keeps no account or search database.</p>
           <p>This static site is hosted by GitHub, Inc., so a visit sends the browser's IP address to GitHub Pages.</p>
           <p>A search or literature poll sends the IP address and the search text directly from the browser to api.fda.gov, NIH hosts including rxnav.nlm.nih.gov, and www.ebi.ac.uk, and the page loads an icon stylesheet from cdnjs.cloudflare.com. Those operators, not the developer, receive that traffic, including possible transfers outside the EEA.</p>
+          <p>Age, weight, sex, pregnancy, allergy, dialysis, and renal numbers are sample branch filters. They start at age 40 years and weight 70 kg. They stay in this browser and are not sent to the developer. If they describe a real person, they are health data. Leave the sample values in place.</p>
         </div>
 
         <div class="p-3 rounded-lg bg-slate-50 border border-slate-200">
           <strong>5. MIT NOTICE AND WHAT IT DOES NOT WAIVE:</strong>
-          The source code is released free of charge, outside commercial activity, under the MIT License ("AS IS", without warranty). Article 2(2) of Directive (EU) 2024/2853 can exempt that kind of free and open-source software from the Directive's no-fault product liability. Article 2(4) preserves national fault-based negligence law. An "AS IS" notice cannot waive liability for bodily injury or death. Hosting this page is not the same thing as only publishing a source repository. The click-through records that this sandbox is not a basis for patient care.
+          The source code is released free of charge, outside commercial activity, under the MIT License ("AS IS", without warranty). Article 2(2) of Directive (EU) 2024/2853 can exempt that kind of free and open-source software from the Directive's no-fault product liability. Article 2(4) preserves national fault-based negligence law. An "AS IS" notice cannot waive liability for bodily injury or death. Hosting this page is not the same thing as only publishing a source repository. Choosing Acknowledge hides this notice in the current tab. It does not record acceptance, and it is not a contract.
         </div>
       </div>
 
@@ -222,7 +223,7 @@
           </button>
           <button id="navBtnResistances" onclick="switchPage(&#39;resistances&#39;)" class="px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 text-slate-300 hover:text-white">
             <i class="fa-solid fa-chart-line"></i>
-            <span>Resistances (Daily Poll)</span>
+            <span>Resistance illustrations</span>
           </button>
         </nav>
       </div>
@@ -314,13 +315,13 @@
             <label class="flex items-center gap-1 cursor-pointer"><input type="radio" name="rrtMode" value="capd" onchange="syncRenalMetric()"> Peritoneal dialysis (CAPD)</label>
           </div>
           <input type="checkbox" id="renalFlag" class="hidden">
-          <p class="text-[10px] text-slate-300 leading-snug">FDA Monograph Branch Explorer. These values are text-filter parameters: they choose which monograph sentences are shown. eGFR is entered in mL/min/1.73 m² and CrCl is entered separately in mL/min. No numeric conversion is applied. A blank CrCl does not become a CrCl. eGFR 90–130 with no dialysis only selects label text that is not limited to renal impairment. Any other eGFR leaves CrCl-specific sentences unmatched. Dialysis selects only a dialysis-labelled branch. Nothing here calculates a dose.</p>
+          <p class="text-[10px] text-slate-300 leading-snug">FDA Monograph Branch Explorer. These values are text-filter parameters: they choose which monograph sentences are shown. eGFR is entered in mL/min/1.73 m² and CrCl is entered separately in mL/min. No numeric conversion is applied, and no equation estimates creatinine clearance. A blank CrCl does not become a CrCl. eGFR 90–130 with no dialysis only selects label text that is not limited to renal impairment. Any other eGFR leaves CrCl-specific sentences unmatched. Dialysis selects only a dialysis-labelled branch. Nothing here calculates a dose. The fields start at sample values. Do not replace them with a real person's age, weight, sex, pregnancy, allergy, dialysis, or renal function.</p>
         </div>
 
         <!-- MONOGRAPH BRANCH PARAMETERS -->
         <div class="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2 text-xs">
           <div class="flex items-center justify-between">
-            <b class="text-slate-700 uppercase tracking-wider text-[11px]">Branch parameters</b>
+            <b class="text-slate-700 uppercase tracking-wider text-[11px]">Sample branch parameters</b>
             <button id="unitBtn" onclick="toggleUnits()" class="text-[11px] font-bold text-blue-600 underline">Metric (kg)</button>
           </div>
           <label class="block">Age
@@ -344,7 +345,7 @@
             <input id="wtRng" type="range" min="2" max="200" step="0.5" value="70" oninput="syncPt(&#39;wt&#39;,this.value)" class="w-full">
           </label>
           <div id="ptNote" class="text-[10px] text-slate-500"></div>
-          <p class="text-[10px] text-slate-400">A fractional year opens an age branch in the label text (for example 0.05 yr). It is a filter, not a patient chart.</p>
+          <p class="text-[10px] text-slate-400">Sample values: age 40 years and weight 70 kg. A fractional year opens an age branch in the label text (for example 0.05 yr). It is a filter, not a patient chart. Leave these samples in place.</p>
           <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="ptPreg" onchange="reFilterCurrentResults()" class="rounded"> Pregnancy text filter</label>
           <label class="block text-[11px]">Hepatic text filter (Child-Pugh band)
             <select id="ptHepClass" onchange="reFilterCurrentResults()" class="mt-1 w-full border border-slate-300 rounded px-2 py-1 text-xs bg-white">
@@ -545,19 +546,19 @@
     <section class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4">
       <div class="space-y-1.5">
         <div class="flex items-center gap-2 flex-wrap">
-          <span class="bg-emerald-100 text-emerald-900 text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full border border-emerald-300 flex items-center gap-1.5">
-            <span class="w-2 h-2 rounded-full bg-emerald-500"></span> Daily literature-index check
+          <span class="bg-slate-100 text-slate-800 text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full border border-slate-300 flex items-center gap-1.5">
+            <span class="w-2 h-2 rounded-full bg-slate-500"></span> Literature-index check
           </span>
           <span id="dailyPollTimestamp" class="text-[11px] font-mono bg-slate-100 text-slate-700 px-2 py-0.5 rounded border border-slate-200">
-            Syncing Daily Poll...
+            Literature index not checked yet
           </span>
           <button onclick="runDailyResistancePoll(true)" class="text-[11px] text-blue-600 hover:underline font-semibold flex items-center gap-1">
-            <i class="fa-solid fa-rotate"></i> Force Poll Refresh
+            <i class="fa-solid fa-rotate"></i> Refresh literature index
           </button>
         </div>
-        <h2 class="text-xl font-bold text-slate-900">Bacterial Resistance Surveillance &amp; Open-Access Literature Poll</h2>
+        <h2 class="text-xl font-bold text-slate-900">Illustrative resistance figures and open-access literature</h2>
         <p class="text-xs text-slate-500">
-          Shows developer-compiled illustrative percentages beside an automated <strong>once-daily</strong> poll of <strong>Open-Access</strong> Europe PMC records. The percentages are not official surveillance statistics.
+          Shows developer-compiled illustrative percentages beside a count of <strong>Open-Access</strong> Europe PMC records. The percentages are static illustrations in this repository. They are not official surveillance statistics, and the literature check does not update them.
         </p>
       </div>
 
@@ -610,7 +611,7 @@
           <div class="flex gap-1.5">
             <input type="text" id="pmcQueryInput" autocomplete="off" placeholder="Search OA resistance papers (no names or identifiers)..." onkeydown="if(event.key === &#39;Enter&#39;) fetchLiveSurveillancePapers()" class="flex-1 bg-slate-800 text-white text-xs rounded-lg px-3 py-1.5 border border-slate-700 focus:outline-none focus:border-blue-500">
             <button onclick="fetchLiveSurveillancePapers()" class="bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg">
-              Poll OA
+              Search OA
             </button>
           </div>
 
@@ -632,10 +633,10 @@
     <div class="max-w-7xl mx-auto space-y-2">
       <div class="flex flex-col md:flex-row md:items-center justify-between gap-2 border-b border-slate-800 pb-2">
         <span class="font-bold text-slate-200">Antimicrobials Untangled — Academic Informatics Sandbox • MIT License ("AS IS" Without Warranty)</span>
-        <span>No cookies • No accounts • Search-box identifier block active • Code under MIT; third-party data stays under its own license</span>
+        <span>No cookies • No accounts • Search box uses a length and keyword filter • Code under MIT; third-party data stays under its own license</span>
       </div>
       <p class="leading-relaxed text-[10px] text-slate-500">
-        <strong>Privacy and network disclosure.</strong> The developer runs no backend server, sets no cookies, and keeps no account or search database. This static site is hosted by GitHub, Inc., so a visit sends the browser's IP address to GitHub Pages. A search or literature poll sends the IP address and the search text directly from the browser to api.fda.gov, NIH hosts including rxnav.nlm.nih.gov, and www.ebi.ac.uk, and the page loads an icon stylesheet from cdnjs.cloudflare.com; those operators, not the developer, receive that traffic, including possible transfers outside the EEA.
+        <strong>Privacy and network disclosure.</strong> The developer runs no backend server, sets no cookies, and keeps no account or search database. This static site is hosted by GitHub, Inc., so a visit sends the browser's IP address to GitHub Pages. A search or literature poll sends the IP address and the search text directly from the browser to api.fda.gov, NIH hosts including rxnav.nlm.nih.gov, and www.ebi.ac.uk, and the page loads an icon stylesheet from cdnjs.cloudflare.com; those operators, not the developer, receive that traffic, including possible transfers outside the EEA. Age, weight, sex, pregnancy, allergy, dialysis, and renal numbers are sample branch filters processed only in this browser. They start at age 40 years and weight 70 kg. If they describe a real person, they are health data. Leave the sample values in place. The search box rejects long text, a number of two or more digits, and a short keyword list. It does not detect a person's name.
       </p>
       <p class="leading-relaxed text-[10px] text-slate-500">
         <strong>Regulatory notice.</strong> Not a medical device under Regulation (EU) 2017/745 or MDCG 2019-11, and not offered as Non-Device CDS under FD&amp;C Act § 520(o)(1)(E), because this public academic sandbox is not limited to health care professionals. Parsed colors are inspection flags, not a statement that a regimen is safe or appropriate. Article 2(2) of Directive (EU) 2024/2853 may exempt free and open-source software developed outside commercial activity from that Directive's no-fault product liability only. It does not displace national fault-based negligence law, and the MIT "AS IS" notice cannot waive liability for bodily injury or death.
@@ -652,6 +653,6 @@
   <noscript>This prototype requires JavaScript to load the database and application.</noscript>
   <script defer src="./amu-engine.js?v=1.1.1"></script>
   <script defer src="./amu-feature-data.js"></script>
-  <script defer src="./amu-integration.js?v=1.2.1"></script>
+  <script defer src="./amu-integration.js?v=20261112-merged"></script>
 </body>
 </html>

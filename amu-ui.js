@@ -243,22 +243,60 @@
       return [...new Set(searches)].map(search => `https://api.fda.gov/drug/label.json?${new URLSearchParams({ search, limit: "20" })}`);
     }
 
-    async function amuFetchRequestedDrug(rawName, accept = () => true, extraUrls = []) {
+    // A new search aborts the previous retrieval so a stalled label download
+    // cannot keep the spinner up or overwrite the newer results.
+    let liveSearchGeneration = 0;
+    let liveSearchAbort = null;
+    function beginLiveSearch() {
+      liveSearchAbort?.abort();
+      liveSearchAbort = new AbortController();
+      return { generation: ++liveSearchGeneration, signal: liveSearchAbort.signal };
+    }
+
+    function amuExternalSignal(signal, timeoutMs) {
+      const timeout = AbortSignal.timeout(timeoutMs);
+      return signal ? AbortSignal.any([signal, timeout]) : timeout;
+    }
+
+    function amuFetchResponse(url, signal, timeoutMs = 8000) {
+      return fetch(url, { signal: amuExternalSignal(signal, timeoutMs) });
+    }
+
+    async function amuMapPool(items, limit, fn) {
+      const out = new Array(items.length);
+      let next = 0;
+      const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+        while (next < items.length) {
+          const index = next++;
+          out[index] = await fn(items[index], index);
+        }
+      });
+      await Promise.all(workers);
+      return out;
+    }
+
+    async function amuFetchRequestedDrug(rawName, accept = () => true, extraUrls = [], signal) {
+      const deadline = Date.now() + 8000;
       for (const url of [...extraUrls, ...amuDrugLookupUrls(rawName)]) {
+        if (signal?.aborted) return null;
+        const remaining = deadline - Date.now();
+        if (remaining < 500) return null;
         try {
-          const response = await fetch(url);
+          const response = await amuFetchResponse(url, signal, remaining);
           if (!response.ok) continue;
           const data = await response.json();
           const exactRecords = amuRequestedFdaRecords(data.results || [], rawName);
           const parsed = deduplicateAndDistillFdaDrugs(exactRecords, rawName).filter(accept);
           const selected = amuSelectRequestedDrug(parsed, rawName);
           if (selected) return selected;
-        } catch (error) { /* Try the next exact-identity query, then return no verified label. */ }
+        } catch (error) {
+          if (signal?.aborted) return null;
+        }
       }
       return null;
     }
 
-    async function fetchCuratedDrugCard(agentName) {
+    async function fetchCuratedDrugCard(agentName, signal) {
       if (currentFetchedDrugs.some(d => curatedProductMatches(d, agentName))) return null;
       const extraUrls = curatedProductRequirement(agentName) === "benzathine_im"
         ? ["https://api.fda.gov/drug/label.json?search=openfda.substance_name:%22penicillin%20g%20benzathine%22+AND+openfda.route:%22intramuscular%22&limit=10"]
@@ -269,7 +307,7 @@
         const routes=preference.routes.map(route=>`openfda.route:"${String(route).replace(/["\\]/g,' ')}"`).join(' OR ');
         extraUrls.unshift('https://api.fda.gov/drug/label.json?'+new URLSearchParams({search:`openfda.generic_name:"${ingredient}" AND (${routes})`,limit:'20'}));
       }
-      return amuFetchRequestedDrug(agentName, d => curatedProductMatches(d, agentName), extraUrls);
+      return amuFetchRequestedDrug(agentName, d => curatedProductMatches(d, agentName), extraUrls, signal);
     }
 
     function buildCuratedSuggestionFallbackCard(agentName) {
@@ -291,13 +329,18 @@
       return card;
     }
 
-    async function ensureCuratedDrugCardsLoaded(agentNames) {
+    async function ensureCuratedDrugCardsLoaded(agentNames, signal = liveSearchAbort?.signal) {
+      const generation = liveSearchGeneration;
       const unique = [...new Set(agentNames || [])];
       const missing = unique.filter(name => !currentFetchedDrugs.some(d =>
         curatedProductMatches(d, name)
       ));
       if (!missing.length) return;
-      const loaded = await Promise.all(missing.map(fetchCuratedDrugCard));
+      let loaded = missing.map(() => null);
+      try {
+        loaded = await amuMapPool(missing, 4, name => fetchCuratedDrugCard(name, signal));
+      } catch (error) { /* Unfetched agents become source-unavailable cards below. */ }
+      if (generation !== liveSearchGeneration) return;
       const byId = new Map(currentFetchedDrugs.map(d => [d.id, d]));
       missing.forEach((name, index) => {
         const card = loaded[index] || buildCuratedSuggestionFallbackCard(name);
@@ -945,6 +988,7 @@
     }
 
     async function runDrugOrGroupPipeline(intent) {
+      const { generation, signal } = beginLiveSearch();
       const isGroup = intent.intentType === "DRUG_GROUP";
       const displayName = intent.matchedTerm;
       currentQueryLabel = displayName;
@@ -970,53 +1014,58 @@
 
       currentFetchedDrugs = [];
 
-      await Promise.allSettled(
-        targetDrugNames.map(async (dName) => {
+      try {
+        const cards = await amuMapPool(targetDrugNames, 4, async (dName) => {
           const requestedName = !isGroup ? (intent.requestedDrugName || dName) : dName;
           const ingredientName = amuDrugLookupRequest(requestedName).ingredientName;
-          const selected = await amuFetchRequestedDrug(requestedName);
+          const selected = await amuFetchRequestedDrug(requestedName, () => true, [], signal);
           const card = selected || buildGuaranteedFallbackCard(requestedName, normalizeBaseDrugName(ingredientName));
           card.forceShowEvenIfAllergic = true;
-          currentFetchedDrugs.push(card);
-        })
-      );
+          return card;
+        });
+        if (generation !== liveSearchGeneration) return;
+        currentFetchedDrugs = cards.filter(Boolean);
 
-      if (!isGroup) {
-        try {
-          const encodedSingle = encodeURIComponent(normalizeBaseDrugName(displayName).toLowerCase());
-          const res = await fetch(`https://rxnav.nlm.nih.gov/REST/rxclass/class/byDrugName.json?drugName=${encodedSingle}&relaSource=MEDRT&rela=may_treat`);
-          if (res.ok) {
-            const data = await res.json();
-            const infos = data?.rxclassDrugInfoList?.rxclassDrugInfo || [];
-            mainInfectionsList.push(...infos.map(i => i.rxclassMinConceptItem?.className).filter(Boolean));
-          }
-        } catch (e) {}
+        if (!isGroup) {
+          try {
+            const encodedSingle = encodeURIComponent(normalizeBaseDrugName(displayName).toLowerCase());
+            const res = await amuFetchResponse(`https://rxnav.nlm.nih.gov/REST/rxclass/class/byDrugName.json?drugName=${encodedSingle}&relaSource=MEDRT&rela=may_treat`, signal, 8000);
+            if (res.ok) {
+              const data = await res.json();
+              const infos = data?.rxclassDrugInfoList?.rxclassDrugInfo || [];
+              mainInfectionsList.push(...infos.map(i => i.rxclassMinConceptItem?.className).filter(Boolean));
+            }
+          } catch (e) {}
+        }
+        if (generation !== liveSearchGeneration) return;
+
+        const uniqueInfections = [...new Set(mainInfectionsList)].slice(0, 14);
+        document.getElementById("nihDiseaseBadge").textContent = `Drug Profile (${currentFetchedDrugs.length} Agent${currentFetchedDrugs.length === 1 ? '' : 's'} • ${uniqueInfections.length} Main Infections)`;
+
+        const infBox = document.getElementById("drugMainInfectionsBox");
+        const infPills = document.getElementById("drugMainInfectionsPills");
+        if (uniqueInfections.length > 0) {
+          infBox.classList.remove("hidden");
+          infPills.innerHTML = uniqueInfections.map(inf => `
+            <button 
+              onclick="executeUntangleSearch('${jsArg(inf)}', true)" 
+              class="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-50 hover:bg-emerald-600 text-emerald-900 hover:text-white border border-emerald-300 transition-all flex items-center gap-1.5 shadow-sm"
+            >
+              <i class="fa-solid fa-stethoscope text-[10px]"></i>
+              <span>${esc(inf)}</span>
+              <i class="fa-solid fa-arrow-right text-[9px] opacity-70"></i>
+            </button>
+          `).join("");
+        }
+      } catch (error) { /* Render the cards retrieved before this lookup failed. */ } finally {
+        if (generation === liveSearchGeneration) document.getElementById("loadingIndicator").classList.add("hidden");
       }
-
-      const uniqueInfections = [...new Set(mainInfectionsList)].slice(0, 14);
-      document.getElementById("nihDiseaseBadge").textContent = `Drug Profile (${currentFetchedDrugs.length} Agent${currentFetchedDrugs.length === 1 ? '' : 's'} • ${uniqueInfections.length} Main Infections)`;
-
-      const infBox = document.getElementById("drugMainInfectionsBox");
-      const infPills = document.getElementById("drugMainInfectionsPills");
-      if (uniqueInfections.length > 0) {
-        infBox.classList.remove("hidden");
-        infPills.innerHTML = uniqueInfections.map(inf => `
-          <button 
-            onclick="executeUntangleSearch('${jsArg(inf)}', true)" 
-            class="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-50 hover:bg-emerald-600 text-emerald-900 hover:text-white border border-emerald-300 transition-all flex items-center gap-1.5 shadow-sm"
-          >
-            <i class="fa-solid fa-stethoscope text-[10px]"></i>
-            <span>${esc(inf)}</span>
-            <i class="fa-solid fa-arrow-right text-[9px] opacity-70"></i>
-          </button>
-        `).join("");
-      }
-
-      document.getElementById("loadingIndicator").classList.add("hidden");
+      if (generation !== liveSearchGeneration) return;
       reFilterCurrentResults();
     }
 
     async function runLiveDiseasePipeline(displayTitle, fdaQueryTerm, nihDiseaseTerm, searchLevel) {
+      const { generation, signal } = beginLiveSearch();
       currentQueryLabel = fdaQueryTerm;
       document.getElementById("activeDiseaseHeader").textContent = displayTitle;
       document.getElementById("loadingIndicator").classList.remove("hidden");
@@ -1027,19 +1076,35 @@
 
       const encodedFda = encodeURIComponent(fdaQueryTerm);
       const encodedNih = encodeURIComponent(nihDiseaseTerm);
+      const curatedPathogenAgents = searchLevel === "PATHOGEN" ? (activePathogenProfile?.curatedDrugs || []) : [];
+      // Syndrome cards are also limited to the curated agent map. The broad
+      // indication search is only needed when that map is empty.
+      const syndromeHasCuratedAgents = searchLevel === "SYNDROME"
+        && (getSyndromeClinicalMap()?.pathogens || []).some(pathogen => pathogen.agents?.length);
 
-      await Promise.allSettled([
-        fetchNihMedRtDrugs(encodedNih),
-        fetchOpenFdaIndicationAndMicrobiologyDrugs(encodedFda, fdaQueryTerm)
-      ]);
-
-      // v1.9 fix: the "All presentations" view filters to the pathogen's curated agents, but those cards were
-      // only fetched once a specific presentation was selected. Load them up front so the view is never empty.
-      if (searchLevel === "PATHOGEN" && activePathogenProfile?.curatedDrugs?.length) {
-        try { await ensureCuratedDrugCardsLoaded(activePathogenProfile.curatedDrugs); } catch (e) { /* fall back to whatever FDA returned */ }
+      try {
+        currentFetchedDrugs = [];
+        currentNihPillNames = [];
+        if (curatedPathogenAgents.length) {
+          // All-presentations only renders these curated agents. Waiting on the
+          // broad openFDA indication dump downloads several megabytes of unused
+          // labels, and a stalled response body never hides the spinner.
+          await Promise.all([
+            fetchNihMedRtDrugs(encodedNih, generation, signal),
+            ensureCuratedDrugCardsLoaded(curatedPathogenAgents, signal)
+          ]);
+        } else if (syndromeHasCuratedAgents) {
+          await fetchNihMedRtDrugs(encodedNih, generation, signal);
+        } else {
+          await Promise.allSettled([
+            fetchNihMedRtDrugs(encodedNih, generation, signal),
+            fetchOpenFdaIndicationAndMicrobiologyDrugs(encodedFda, fdaQueryTerm, generation, signal)
+          ]);
+        }
+      } finally {
+        if (generation === liveSearchGeneration) document.getElementById("loadingIndicator").classList.add("hidden");
       }
-
-      document.getElementById("loadingIndicator").classList.add("hidden");
+      if (generation !== liveSearchGeneration) return;
 
       if (searchLevel === "PATHOGEN") {
         document.getElementById("syndromePathogenFilterBox")?.classList.add("hidden");
@@ -1047,6 +1112,7 @@
       } else if (searchLevel === "SYNDROME") {
         document.getElementById("pathogenDiseaseFilterBox").classList.add("hidden");
         await ensureSyndromeDrugCardsLoaded();
+        if (generation !== liveSearchGeneration) return;
         renderSyndromePathogenFilterBar();
       } else {
         document.getElementById("syndromePathogenFilterBox")?.classList.add("hidden");
@@ -1150,7 +1216,7 @@
     // =========================================================================
     // 10. NIH NLM RXCLASS FETCHER (SINGLE-SELECT RADIO PILLS, NO POPUP)
     // =========================================================================
-    async function fetchNihMedRtDrugs(encodedTerm) {
+    async function fetchNihMedRtDrugs(encodedTerm, generation = liveSearchGeneration, signal) {
       const badge = document.getElementById("nihDiseaseBadge");
       const box = document.getElementById("nihIngredientsBox");
 
@@ -1160,18 +1226,20 @@
       }
 
       try {
-        let res = await fetch(`https://rxnav.nlm.nih.gov/REST/rxclass/class/byName.json?className=${encodedTerm}&classTypes=DISEASE`);
+        let res = await amuFetchResponse(`https://rxnav.nlm.nih.gov/REST/rxclass/class/byName.json?className=${encodedTerm}&classTypes=DISEASE`, signal, 8000);
         let data = await res.json();
         let classes = data?.rxclassMinConceptList?.rxclassMinConcept || [];
         if (classes.length === 0) {
-          res = await fetch(`https://rxnav.nlm.nih.gov/REST/rxclass/class/similar.json?className=${encodedTerm}&classTypes=DISEASE`);
+          res = await amuFetchResponse(`https://rxnav.nlm.nih.gov/REST/rxclass/class/similar.json?className=${encodedTerm}&classTypes=DISEASE`, signal, 8000);
           data = await res.json();
           classes = data?.similarityMember?.rankClassConcept || [];
         }
         if (classes.length > 0) {
+          if (generation !== liveSearchGeneration) return;
           const matchedClass = classes[0];
           badge.textContent = `NIH MED-RT: ${matchedClass.className} (${matchedClass.classId})`;
-          const memRes = await fetch(`https://rxnav.nlm.nih.gov/REST/rxclass/classMembers.json?classId=${matchedClass.classId}&relaSource=MEDRT&rela=may_treat`);
+          const memRes = await amuFetchResponse(`https://rxnav.nlm.nih.gov/REST/rxclass/classMembers.json?classId=${matchedClass.classId}&relaSource=MEDRT&rela=may_treat`, signal, 8000);
+          if (generation !== liveSearchGeneration) return;
           const memData = await memRes.json();
           const members = memData?.drugMemberGroup?.drugMember || [];
           const nihNames = members
@@ -1179,14 +1247,15 @@
             .filter(Boolean)
             .filter(name => !isNonAntimicrobialNoise(name));
           combinedIngredients.push(...nihNames);
-        } else {
+        } else if (generation === liveSearchGeneration) {
           badge.textContent = activePathogenProfile 
             ? `Pathogen Knowledge Graph + FDA Microbiology Mode` 
             : `NIH MED-RT: Direct FDA Indication Mode`;
         }
       } catch (e) {
-        badge.textContent = `Direct FDA Indication & Microbiology Mode`;
+        if (generation === liveSearchGeneration) badge.textContent = `Direct FDA Indication & Microbiology Mode`;
       }
+      if (generation !== liveSearchGeneration) return;
 
       // Deduplicate by normalized base molecule (including benzathine/procaine salts)
       const seenBaseMolecules = new Set();
@@ -1258,25 +1327,26 @@
       }
     }
 
-    async function fetchOpenFdaIndicationAndMicrobiologyDrugs(encodedTerm, rawTerm) {
-      currentFetchedDrugs = [];
+    async function fetchOpenFdaIndicationAndMicrobiologyDrugs(encodedTerm, rawTerm, generation = liveSearchGeneration, signal) {
+      let results = [];
       try {
         const epcFilter = `openfda.pharm_class_epc:(antibacterial+OR+antimicrobial+OR+antifungal+OR+antiviral+OR+antimycobacterial+OR+antiprotozoal)`;
-        let url = `https://api.fda.gov/drug/label.json?search=(indications_and_usage:"${encodedTerm}"+OR+microbiology:"${encodedTerm}")+AND+${epcFilter}&limit=50`;
-        let res = await fetch(url);
-        if (!res.ok) {
-          url = `https://api.fda.gov/drug/label.json?search=(indications_and_usage:${encodedTerm}+OR+microbiology:${encodedTerm})+AND+${epcFilter}&limit=45`;
-          res = await fetch(url);
-        }
-        if (!res.ok) {
-          url = `https://api.fda.gov/drug/label.json?search=(indications_and_usage:"${encodedTerm}"+OR+microbiology:"${encodedTerm}")+AND+_exists_:openfda.generic_name&limit=35`;
-          res = await fetch(url);
-        }
-        if (res.ok) {
+        const urls = [
+          `https://api.fda.gov/drug/label.json?search=(indications_and_usage:"${encodedTerm}"+OR+microbiology:"${encodedTerm}")+AND+${epcFilter}&limit=50`,
+          `https://api.fda.gov/drug/label.json?search=(indications_and_usage:${encodedTerm}+OR+microbiology:${encodedTerm})+AND+${epcFilter}&limit=45`,
+          `https://api.fda.gov/drug/label.json?search=(indications_and_usage:"${encodedTerm}"+OR+microbiology:"${encodedTerm}")+AND+_exists_:openfda.generic_name&limit=35`
+        ];
+        for (const url of urls) {
+          if (signal?.aborted || generation !== liveSearchGeneration) return;
+          const res = await amuFetchResponse(url, signal, 12000);
+          if (!res.ok) continue;
           const data = await res.json();
-          currentFetchedDrugs = deduplicateAndDistillFdaDrugs(data.results || [], rawTerm);
+          results = data.results || [];
+          break;
         }
       } catch (e) {}
+      if (generation !== liveSearchGeneration) return;
+      currentFetchedDrugs = deduplicateAndDistillFdaDrugs(results, rawTerm);
     }
 
     // EXCLUSIVE SINGLE-DRUG SELECTION: Unpins any previously chosen drug and pins ONLY the newly selected drug to #1 (No Popup)

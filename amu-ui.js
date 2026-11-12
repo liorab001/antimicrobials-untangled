@@ -240,7 +240,13 @@
         const first = base.split(/\s+/)[0];
         searches.push(`openfda.substance_name:${quote(first)} OR openfda.generic_name:${quote(first)}`);
       }
-      return [...new Set(searches)].map(search => `https://api.fda.gov/drug/label.json?${new URLSearchParams({ search, limit: "20" })}`);
+      // Newest labels that actually contain a dosing section. A short page is
+      // enough for one requested product and avoids downloading duplicate SPLs.
+      return [...new Set(searches)].map(search => `https://api.fda.gov/drug/label.json?${new URLSearchParams({
+        search: `${search} AND (_exists_:dosage_and_administration OR _exists_:dosage_and_administration_table)`,
+        sort: "effective_time:desc",
+        limit: "8"
+      })}`);
     }
 
     // A new search aborts the previous retrieval so a stalled label download
@@ -277,21 +283,30 @@
 
     async function amuFetchRequestedDrug(rawName, accept = () => true, extraUrls = [], signal) {
       const deadline = Date.now() + 8000;
-      for (const url of [...extraUrls, ...amuDrugLookupUrls(rawName)]) {
+      const urls = [...extraUrls, ...amuDrugLookupUrls(rawName)];
+      // Two queries at a time so a miss on the specific name does not wait out
+      // before the next candidate starts. Earlier URLs stay preferred.
+      for (let start = 0; start < urls.length; start += 2) {
         if (signal?.aborted) return null;
         const remaining = deadline - Date.now();
         if (remaining < 500) return null;
-        try {
-          const response = await amuFetchResponse(url, signal, remaining);
-          if (!response.ok) continue;
-          const data = await response.json();
-          const exactRecords = amuRequestedFdaRecords(data.results || [], rawName);
-          const parsed = deduplicateAndDistillFdaDrugs(exactRecords, rawName).filter(accept);
-          const selected = amuSelectRequestedDrug(parsed, rawName);
-          if (selected) return selected;
-        } catch (error) {
-          if (signal?.aborted) return null;
-        }
+        const batch = urls.slice(start, start + 2);
+        const found = await Promise.all(batch.map(async (url, offset) => {
+          try {
+            const response = await amuFetchResponse(url, signal, remaining);
+            if (!response.ok) return null;
+            const data = await response.json();
+            const exactRecords = amuRequestedFdaRecords(data.results || [], rawName);
+            const parsed = deduplicateAndDistillFdaDrugs(exactRecords, rawName).filter(accept);
+            const selected = amuSelectRequestedDrug(parsed, rawName);
+            return selected ? { selected, offset } : null;
+          } catch (error) {
+            if (signal?.aborted) return null;
+            return null;
+          }
+        }));
+        const winner = found.filter(Boolean).sort((a, b) => a.offset - b.offset)[0];
+        if (winner) return winner.selected;
       }
       return null;
     }
@@ -299,13 +314,21 @@
     async function fetchCuratedDrugCard(agentName, signal) {
       if (currentFetchedDrugs.some(d => curatedProductMatches(d, agentName))) return null;
       const extraUrls = curatedProductRequirement(agentName) === "benzathine_im"
-        ? ["https://api.fda.gov/drug/label.json?search=openfda.substance_name:%22penicillin%20g%20benzathine%22+AND+openfda.route:%22intramuscular%22&limit=10"]
+        ? ["https://api.fda.gov/drug/label.json?" + new URLSearchParams({
+            search: 'openfda.substance_name:"penicillin g benzathine" AND openfda.route:"intramuscular" AND (_exists_:dosage_and_administration OR _exists_:dosage_and_administration_table)',
+            sort: "effective_time:desc",
+            limit: "5"
+          })]
         : [];
       const preference=amuCuratedProductPreference(agentName);
       if(preference?.routes?.length){
         const ingredient=normalizeBaseDrugName(amuDrugLookupRequest(agentName).ingredientName).replace(/["\\]/g,' ');
         const routes=preference.routes.map(route=>`openfda.route:"${String(route).replace(/["\\]/g,' ')}"`).join(' OR ');
-        extraUrls.unshift('https://api.fda.gov/drug/label.json?'+new URLSearchParams({search:`openfda.generic_name:"${ingredient}" AND (${routes})`,limit:'20'}));
+        extraUrls.unshift('https://api.fda.gov/drug/label.json?'+new URLSearchParams({
+          search:`openfda.generic_name:"${ingredient}" AND (${routes}) AND (_exists_:dosage_and_administration OR _exists_:dosage_and_administration_table)`,
+          sort:'effective_time:desc',
+          limit:'8'
+        }));
       }
       return amuFetchRequestedDrug(agentName, d => curatedProductMatches(d, agentName), extraUrls, signal);
     }
@@ -766,6 +789,7 @@
     let activePathogenProfile = null;
     let activeDiseaseFilterId = "all";
     let currentNihPillNames = [];
+    let currentNihIngredientNames = [];
     let selectedPinnedDrugName = null; // Enforces single-drug selection in the NIH Active Ingredients bar
     const monographStore = {};
 
@@ -1085,6 +1109,7 @@
       try {
         currentFetchedDrugs = [];
         currentNihPillNames = [];
+        currentNihIngredientNames = [];
         if (curatedPathogenAgents.length) {
           // All-presentations only renders these curated agents. Waiting on the
           // broad openFDA indication dump downloads several megabytes of unused
@@ -1096,10 +1121,8 @@
         } else if (syndromeHasCuratedAgents) {
           await fetchNihMedRtDrugs(encodedNih, generation, signal);
         } else {
-          await Promise.allSettled([
-            fetchNihMedRtDrugs(encodedNih, generation, signal),
-            fetchOpenFdaIndicationAndMicrobiologyDrugs(encodedFda, fdaQueryTerm, generation, signal)
-          ]);
+          const nihTask = fetchNihMedRtDrugs(encodedNih, generation, signal);
+          await fetchOpenFdaIndicationAndMicrobiologyDrugs(encodedFda, fdaQueryTerm, generation, signal, nihTask);
         }
       } finally {
         if (generation === liveSearchGeneration) document.getElementById("loadingIndicator").classList.add("hidden");
@@ -1235,11 +1258,11 @@
           classes = data?.similarityMember?.rankClassConcept || [];
         }
         if (classes.length > 0) {
-          if (generation !== liveSearchGeneration) return;
+          if (generation !== liveSearchGeneration) return [];
           const matchedClass = classes[0];
           badge.textContent = `NIH MED-RT: ${matchedClass.className} (${matchedClass.classId})`;
           const memRes = await amuFetchResponse(`https://rxnav.nlm.nih.gov/REST/rxclass/classMembers.json?classId=${matchedClass.classId}&relaSource=MEDRT&rela=may_treat`, signal, 8000);
-          if (generation !== liveSearchGeneration) return;
+          if (generation !== liveSearchGeneration) return [];
           const memData = await memRes.json();
           const members = memData?.drugMemberGroup?.drugMember || [];
           const nihNames = members
@@ -1255,7 +1278,7 @@
       } catch (e) {
         if (generation === liveSearchGeneration) badge.textContent = `Direct FDA Indication & Microbiology Mode`;
       }
-      if (generation !== liveSearchGeneration) return;
+      if (generation !== liveSearchGeneration) return [];
 
       // Deduplicate by normalized base molecule (including benzathine/procaine salts)
       const seenBaseMolecules = new Set();
@@ -1270,11 +1293,14 @@
         }
       }
 
-      currentNihPillNames = deduplicatedIngredients.slice(0, 22);
+      currentNihIngredientNames = deduplicatedIngredients;
+      // The pill bar stays readable; label retrieval uses the full member list.
+      currentNihPillNames = deduplicatedIngredients.slice(0, 40);
       if (currentNihPillNames.length > 0) {
         box.classList.remove("hidden");
         renderNihIngredientPills();
       }
+      return deduplicatedIngredients;
     }
 
     // Renders the NIH Active Ingredient Pills so ONLY ONE drug can appear selected at any time
@@ -1327,26 +1353,384 @@
       }
     }
 
-    async function fetchOpenFdaIndicationAndMicrobiologyDrugs(encodedTerm, rawTerm, generation = liveSearchGeneration, signal) {
-      let results = [];
-      try {
-        const epcFilter = `openfda.pharm_class_epc:(antibacterial+OR+antimicrobial+OR+antifungal+OR+antiviral+OR+antimycobacterial+OR+antiprotozoal)`;
-        const urls = [
-          `https://api.fda.gov/drug/label.json?search=(indications_and_usage:"${encodedTerm}"+OR+microbiology:"${encodedTerm}")+AND+${epcFilter}&limit=50`,
-          `https://api.fda.gov/drug/label.json?search=(indications_and_usage:${encodedTerm}+OR+microbiology:${encodedTerm})+AND+${epcFilter}&limit=45`,
-          `https://api.fda.gov/drug/label.json?search=(indications_and_usage:"${encodedTerm}"+OR+microbiology:"${encodedTerm}")+AND+_exists_:openfda.generic_name&limit=35`
-        ];
-        for (const url of urls) {
-          if (signal?.aborted || generation !== liveSearchGeneration) return;
-          const res = await amuFetchResponse(url, signal, 12000);
-          if (!res.ok) continue;
-          const data = await res.json();
-          results = data.results || [];
-          break;
+    // openFDA will return up to 1000 label documents per call, but those documents
+    // repeat the same ingredient across manufacturers. A count of 1000 distinct
+    // generic names is small; each follow-up asks for one current dosing label.
+    const AMU_EPC_ANTIMICROBIAL = "openfda.pharm_class_epc:(antibacterial OR antimicrobial OR antifungal OR antiviral OR antimycobacterial OR antiprotozoal)";
+    const AMU_DOSING_EXISTS = "(_exists_:dosage_and_administration OR _exists_:dosage_and_administration_table)";
+    const AMU_SYSTEMIC_ROUTE = 'openfda.route:("ORAL" OR "INTRAVENOUS" OR "INTRAMUSCULAR" OR "PARENTERAL" OR "SUBCUTANEOUS")';
+    const AMU_ORAL_ROUTE = 'openfda.route:"ORAL"';
+    const AMU_PARENTERAL_ROUTE = 'openfda.route:("INTRAVENOUS" OR "INTRAMUSCULAR" OR "PARENTERAL" OR "SUBCUTANEOUS")';
+    const AMU_MAX_DIVERSE_INGREDIENTS = 80;
+    const AMU_LABEL_FETCH_CONCURRENCY = 4;
+    const amuOpenFdaJsonCache = new Map();
+
+    function amuFdaLabelUrl(params) {
+      const query = new URLSearchParams();
+      for (const [key, value] of Object.entries(params || {})) {
+        if (value != null && value !== "") query.set(key, String(value));
+      }
+      return "https://api.fda.gov/drug/label.json?" + query.toString();
+    }
+
+    function amuQuoteFdaTerm(value) {
+      return '"' + String(value || "").replace(/["\\]/g, " ").replace(/\s+/g, " ").trim() + '"';
+    }
+
+    function amuIndicationMicrobiologyClause(term) {
+      const quoted = amuQuoteFdaTerm(term);
+      return `(indications_and_usage:${quoted} OR microbiology:${quoted})`;
+    }
+
+    async function amuFetchJson(url, signal, timeoutMs, useCache = false) {
+      if (useCache && amuOpenFdaJsonCache.has(url)) return amuOpenFdaJsonCache.get(url);
+      for (let attempt = 0; attempt < 2; attempt++) {
+        if (signal?.aborted) return null;
+        let response;
+        try {
+          response = await amuFetchResponse(url, signal, timeoutMs);
+        } catch (error) {
+          return null;
         }
-      } catch (e) {}
-      if (generation !== liveSearchGeneration) return;
-      currentFetchedDrugs = deduplicateAndDistillFdaDrugs(results, rawTerm);
+        if (response.status === 429 && attempt === 0) {
+          const header = Number(response.headers.get("retry-after"));
+          const waitMs = Number.isFinite(header) && header > 0 ? Math.min(header * 1000, 3000) : 700;
+          await new Promise(resolve => setTimeout(resolve, waitMs));
+          continue;
+        }
+        if (response.status === 404) {
+          const empty = { results: [] };
+          if (useCache) amuOpenFdaJsonCache.set(url, empty);
+          return empty;
+        }
+        if (!response.ok) return null;
+        try {
+          const data = await response.json();
+          if (useCache && data) {
+            amuOpenFdaJsonCache.set(url, data);
+            if (amuOpenFdaJsonCache.size > 240) amuOpenFdaJsonCache.delete(amuOpenFdaJsonCache.keys().next().value);
+          }
+          return data;
+        } catch (error) {
+          return null;
+        }
+      }
+      return null;
+    }
+
+    async function amuOpenFdaCountTerms(search, field, signal) {
+      const data = await amuFetchJson(amuFdaLabelUrl({ search, count: field, limit: "1000" }), signal, 12000, true);
+      return Array.isArray(data?.results) ? data.results.filter(row => row && typeof row.term === "string" && row.term.trim()) : [];
+    }
+
+    function amuFormulationMarks(raw) {
+      const text = String(raw || "");
+      const marks = [];
+      if (/\bbenzathine\b/i.test(text)) marks.push("benzathine");
+      if (/\bprocaine\b/i.test(text)) marks.push("procaine");
+      if (/\bliposomal\b/i.test(text)) marks.push("liposomal");
+      if (/\blipid complex\b/i.test(text)) marks.push("lipid_complex");
+      if (/\bcholesteryl sulfate\b|\bcolloidal dispersion\b/i.test(text)) marks.push("colloidal_dispersion");
+      if (/\bextended[- ]release\b|\bdelayed[- ]release\b|\bmodified[- ]release\b/i.test(text)) marks.push("modified_release");
+      return marks;
+    }
+
+    function amuCensusIdentity(term) {
+      const marks = amuFormulationMarks(term);
+      let base = canonicalizeClinicalIngredient(term)
+        .replace(/\b(?:tablet|tablets|capsule|capsules|suspension|solution|syrup|cream|ointment|gel|powder|lozenge|spray|drops|ds)\b/g, " ")
+        .replace(/\bsulfameth\b/g, "sulfamethoxazole")
+        .replace(/\btrimeth\b/g, "trimethoprim");
+      base = [...new Set(base.split(" ").filter(Boolean))].sort().join(" ");
+      return { base, marks, key: [base, ...marks].join("|") };
+    }
+
+    function amuIngredientBucket(base) {
+      const n = String(base || "");
+      if (/floxacin|oxacin/.test(n)) return "fluoroquinolone";
+      if (/cillin|penicillin/.test(n)) return "penicillin";
+      if (/cef|ceph/.test(n)) return "cephalosporin";
+      if (/penem|bactam/.test(n)) return "carbapenem";
+      if (/cycline/.test(n)) return "tetracycline";
+      if (/thromycin|mycin|micin/.test(n)) return "macrolide_aminoglycoside";
+      if (/conazole|fungin|amphotericin|flucytosine/.test(n)) return "antifungal";
+      if (/navir|clovir|vudine|tamivir|sivir|mivir|buvir|previr|asvir/.test(n)) return "antiviral";
+      if (/nidazole|dazole/.test(n)) return "nitroimidazole";
+      if (/trimethoprim|sulfameth|oxazole/.test(n)) return "antifolate";
+      return "other";
+    }
+
+    function amuIngredientLooksAntimicrobial(name) {
+      const text = String(name || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+      if (!text || isNonAntimicrobialNoise(text)) return false;
+      if (/\b(?:prednisone|prednisolone|methylprednisolone|acetylcysteine|treprostinil|citric acid|sucralfate|albuterol|budesonide|fluticasone|salmeterol|ipratropium|guaifenesin|dextromethorphan|montelukast|theophylline|hydrocortisone|dexamethasone)\b/.test(text)) return false;
+      if (/cef|ceph|floxacin|oxacin|cillin|penem|bactam|cycline|thromycin|mycin|micin|conazole|fungin|nidazole|dazole|navir|clovir|vudine|tamivir|sivir|mivir|buvir|previr|asvir|phenicol/.test(text)) return true;
+      return /\b(?:penicillin|linezolid|tedizolid|daptomycin|mupirocin|fosfomycin|nitrofurantoin|rifampin|rifampicin|rifabutin|rifapentine|isoniazid|pyrazinamide|ethambutol|atovaquone|pentamidine|nitazoxanide|fidaxomicin|lefamulin|telavancin|oritavancin|dalbavancin|vancomycin|teicoplanin|colistin|polymyxin|trimethoprim|sulfamethoxazole|sulfameth|streptomycin|ribavirin|oseltamivir|zanamivir|baloxavir|remdesivir|amphotericin|griseofulvin|terbinafine|flucytosine|aztreonam|plazomicin|foscarnet|cidofovir|letermovir|maribavir|nirmatrelvir|quinupristin|dalfopristin|chloramphenicol)\b/.test(text);
+    }
+
+    function amuIsTypoOf(candidate, canonical, candidateCount, canonicalCount) {
+      if (!candidate || !canonical || candidate === canonical) return false;
+      const squeeze = value => String(value).replace(/(.)\1+/g, "$1");
+      if (squeeze(candidate) === squeeze(canonical)) return true;
+      if (Math.abs(candidate.length - canonical.length) > 2) return false;
+      const prefix = Math.min(6, candidate.length, canonical.length);
+      if (prefix < 6 || candidate.slice(0, prefix) !== canonical.slice(0, prefix)) return false;
+      const distance = levenshteinDistance(candidate, canonical);
+      if (distance === 1) return true;
+      return distance === 2 && candidateCount * 2 <= canonicalCount;
+    }
+
+    function amuCollapseCensus(entries, epcKeys) {
+      const prepared = [];
+      for (const entry of entries || []) {
+        const term = String(entry?.term || "").trim();
+        if (!term) continue;
+        const identity = amuCensusIdentity(term);
+        if (!identity.base || identity.base.length < 3) continue;
+        const listed = epcKeys.has(identity.key) || epcKeys.has(identity.base);
+        if (!listed && !amuIngredientLooksAntimicrobial(term) && !amuIngredientLooksAntimicrobial(identity.base)) continue;
+        prepared.push({ term, count: Number(entry.count) || 0, identity, listed });
+      }
+      prepared.sort((a, b) => b.count - a.count);
+      const groups = [];
+      for (const row of prepared) {
+        const typoOf = groups.find(group => group.identity.marks.join("|") === row.identity.marks.join("|")
+          && amuIsTypoOf(row.identity.base, group.identity.base, row.count, group.count));
+        if (typoOf) {
+          typoOf.count += row.count;
+          continue;
+        }
+        const group = groups.find(existing => existing.identity.key === row.identity.key);
+        if (group) {
+          group.count += row.count;
+          if (group.terms.length < 6 && !group.terms.includes(row.term)) group.terms.push(row.term);
+          group.listed = group.listed || row.listed;
+        } else {
+          groups.push({
+            identity: row.identity,
+            count: row.count,
+            terms: [row.term],
+            listed: row.listed,
+            loose: false,
+            bucket: amuIngredientBucket(row.identity.base),
+            rank: 0,
+            primaryRecord: null
+          });
+        }
+      }
+      return groups;
+    }
+
+    function amuInterleaveByBucket(groups) {
+      const buckets = new Map();
+      for (const group of groups) {
+        if (!buckets.has(group.bucket)) buckets.set(group.bucket, []);
+        buckets.get(group.bucket).push(group);
+      }
+      for (const list of buckets.values()) list.sort((a, b) => b.count - a.count || a.identity.base.localeCompare(b.identity.base));
+      const lanes = [...buckets.values()].sort((a, b) => (b[0]?.count || 0) - (a[0]?.count || 0));
+      const ranked = [];
+      while (ranked.length < AMU_MAX_DIVERSE_INGREDIENTS) {
+        let progressed = false;
+        for (const lane of lanes) {
+          if (!lane.length) continue;
+          ranked.push(lane.shift());
+          progressed = true;
+          if (ranked.length >= AMU_MAX_DIVERSE_INGREDIENTS) break;
+        }
+        if (!progressed) break;
+      }
+      ranked.forEach((group, index) => { group.rank = index; });
+      return ranked;
+    }
+
+    function amuSeedGroups(names, seenKeys) {
+      const rows = [];
+      const local = new Set();
+      for (const name of names || []) {
+        if (!amuIngredientLooksAntimicrobial(name)) continue;
+        const identity = amuCensusIdentity(name);
+        if (!identity.base || identity.base.length < 3 || seenKeys.has(identity.key) || local.has(identity.key)) continue;
+        local.add(identity.key);
+        rows.push({
+          identity,
+          count: 1,
+          terms: [String(name).trim()],
+          listed: false,
+          loose: true,
+          bucket: amuIngredientBucket(identity.base),
+          rank: 0,
+          primaryRecord: null
+        });
+      }
+      return amuInterleaveByBucket(rows).slice(0, 24);
+    }
+
+    function amuExactGenericClause(terms) {
+      const unique = [...new Set((terms || []).map(term => String(term || "").trim()).filter(Boolean))].slice(0, 6);
+      if (!unique.length) return "";
+      const parts = unique.map(term => `openfda.generic_name.exact:${amuQuoteFdaTerm(term)}`);
+      return parts.length === 1 ? parts[0] : `(${parts.join(" OR ")})`;
+    }
+
+    function amuGenericClause(group) {
+      if (group.loose) {
+        const name = group.terms[0];
+        return `(openfda.generic_name:${amuQuoteFdaTerm(name)} OR openfda.substance_name:${amuQuoteFdaTerm(name)})`;
+      }
+      return amuExactGenericClause(group.terms);
+    }
+
+    function amuRepresentativeLabelParams(termClause, indicationClause, routeClause) {
+      const parts = [termClause, AMU_DOSING_EXISTS];
+      if (indicationClause) parts.push(indicationClause);
+      if (routeClause) parts.push(routeClause);
+      return { search: parts.filter(Boolean).join(" AND "), sort: "effective_time:desc", limit: "1" };
+    }
+
+    async function amuDownloadLabel(params, signal) {
+      const data = await amuFetchJson(amuFdaLabelUrl(params), signal, 12000, true);
+      return data?.results?.[0] || null;
+    }
+
+    let amuLiveRenderFrame = 0;
+    function amuScheduleLiveRender() {
+      if (amuLiveRenderFrame || typeof reFilterCurrentResults !== "function") return;
+      amuLiveRenderFrame = requestAnimationFrame(() => {
+        amuLiveRenderFrame = 0;
+        reFilterCurrentResults();
+      });
+    }
+    function amuFlushLiveRender() {
+      if (amuLiveRenderFrame) cancelAnimationFrame(amuLiveRenderFrame);
+      amuLiveRenderFrame = 0;
+      if (typeof reFilterCurrentResults === "function") reFilterCurrentResults();
+    }
+    function amuRememberFetchedCards(cards, generation) {
+      if (generation !== liveSearchGeneration || !cards?.length) return;
+      const byId = new Map(currentFetchedDrugs.map(drug => [drug.id, drug]));
+      let changed = false;
+      for (const card of cards) {
+        if (!card?.id || byId.has(card.id)) continue;
+        byId.set(card.id, card);
+        changed = true;
+      }
+      if (!changed) return;
+      currentFetchedDrugs = [...byId.values()].sort((a, b) =>
+        (a.diversityRank ?? 1e9) - (b.diversityRank ?? 1e9) || String(a.genericName).localeCompare(String(b.genericName)));
+      amuScheduleLiveRender();
+    }
+
+    async function amuFetchLabelPhase(group, indicationClause, signal, phase) {
+      const clause = amuGenericClause(group);
+      if (!clause || signal?.aborted) return [];
+      const pull = (route) => amuDownloadLabel(amuRepresentativeLabelParams(clause, indicationClause, route), signal);
+      if (phase === "complement") {
+        const primary = group.primaryRecord;
+        if (!primary) return [];
+        const routeText = (primary.openfda?.route || []).join(" ").toUpperCase();
+        const hasOral = /\bORAL\b/.test(routeText);
+        const hasParenteral = /\b(?:INTRAVENOUS|INTRAMUSCULAR|PARENTERAL|SUBCUTANEOUS)\b/.test(routeText);
+        const complement = hasOral && !hasParenteral ? AMU_PARENTERAL_ROUTE : hasParenteral && !hasOral ? AMU_ORAL_ROUTE : "";
+        if (!complement) return [];
+        const secondary = await pull(complement);
+        if (!secondary || secondary.id === primary.id || (secondary.set_id && secondary.set_id === primary.set_id)) return [];
+        return [secondary];
+      }
+      let primary = await pull(AMU_SYSTEMIC_ROUTE);
+      if (!primary) primary = await pull("");
+      if (signal?.aborted || !primary) return [];
+      group.primaryRecord = primary;
+      return [primary];
+    }
+
+    async function amuRunLabelPhase(groups, indicationClause, generation, signal, phase, rawTerm) {
+      await amuMapPool(groups, AMU_LABEL_FETCH_CONCURRENCY, async group => {
+        if (signal?.aborted || generation !== liveSearchGeneration) return null;
+        let records = [];
+        try {
+          records = await amuFetchLabelPhase(group, indicationClause, signal, phase);
+        } catch (error) {
+          return null;
+        }
+        if (generation !== liveSearchGeneration || signal?.aborted || !records.length) return null;
+        const offset = phase === "complement" ? 1 : 0;
+        const cards = deduplicateAndDistillFdaDrugs(records, rawTerm);
+        cards.forEach((card, index) => { card.diversityRank = group.rank * 10 + offset + index; });
+        amuRememberFetchedCards(cards, generation);
+        return records;
+      });
+    }
+
+    async function amuFallbackPagedLabels(rawTerm, indication, generation, signal) {
+      const best = new Map();
+      for (let page = 0; page < 4; page++) {
+        if (signal?.aborted || generation !== liveSearchGeneration) return;
+        const data = await amuFetchJson(amuFdaLabelUrl({
+          search: `${indication} AND ${AMU_DOSING_EXISTS} AND _exists_:openfda.generic_name`,
+          sort: "effective_time:desc",
+          limit: "40",
+          skip: String(page * 40)
+        }), signal, 15000, true);
+        const rows = data?.results || [];
+        if (!rows.length) break;
+        for (const item of rows) {
+          const generic = item?.openfda?.generic_name?.[0];
+          if (!generic) continue;
+          const identity = amuCensusIdentity(generic);
+          if (!amuIngredientLooksAntimicrobial(generic) && !amuIngredientLooksAntimicrobial(identity.base)) continue;
+          const prev = best.get(identity.key);
+          if (!prev || String(item.effective_time || "") > String(prev.effective_time || "")) best.set(identity.key, item);
+          if (best.size >= AMU_MAX_DIVERSE_INGREDIENTS) break;
+        }
+        if (best.size >= AMU_MAX_DIVERSE_INGREDIENTS || rows.length < 40) break;
+      }
+      const cards = deduplicateAndDistillFdaDrugs([...best.values()], rawTerm);
+      cards.forEach((card, index) => { card.diversityRank = index; });
+      amuRememberFetchedCards(cards, generation);
+    }
+
+    async function fetchOpenFdaIndicationAndMicrobiologyDrugs(encodedTerm, rawTerm, generation = liveSearchGeneration, signal, nihTask) {
+      const term = String(rawTerm || "").trim();
+      if (!term) return;
+      const seenKeys = new Set();
+      try {
+        const indication = amuIndicationMicrobiologyClause(term);
+        const [broad, epc] = await Promise.all([
+          amuOpenFdaCountTerms(`${indication} AND _exists_:openfda.generic_name`, "openfda.generic_name.exact", signal),
+          amuOpenFdaCountTerms(`${indication} AND ${AMU_EPC_ANTIMICROBIAL}`, "openfda.generic_name.exact", signal)
+        ]);
+        if (signal?.aborted || generation !== liveSearchGeneration) return;
+        const epcKeys = new Set();
+        for (const row of epc) {
+          const identity = amuCensusIdentity(row.term);
+          if (identity.key) epcKeys.add(identity.key);
+          if (identity.base) epcKeys.add(identity.base);
+        }
+        const sourceRows = broad.length ? broad : epc;
+        const groups = sourceRows.length ? amuInterleaveByBucket(amuCollapseCensus(sourceRows, epcKeys)) : [];
+        if (!groups.length) {
+          await amuFallbackPagedLabels(term, indication, generation, signal);
+          return;
+        }
+        for (const group of groups) seenKeys.add(group.identity.key);
+        await amuRunLabelPhase(groups, indication, generation, signal, "primary", term);
+        let seedNames = [];
+        if (nihTask && generation === liveSearchGeneration && !signal?.aborted) {
+          try { seedNames = await nihTask; } catch (error) { seedNames = []; }
+        }
+        if (generation !== liveSearchGeneration || signal?.aborted) return;
+        const seeds = amuSeedGroups(Array.isArray(seedNames) ? seedNames : [], seenKeys);
+        seeds.forEach((group, index) => { group.rank = groups.length + index; seenKeys.add(group.identity.key); });
+        if (seeds.length) await amuRunLabelPhase(seeds, indication, generation, signal, "primary", term);
+        if (generation !== liveSearchGeneration || signal?.aborted) return;
+        // The other route for each ingredient continues after the first labels are visible.
+        void amuRunLabelPhase(groups.concat(seeds), indication, generation, signal, "complement", term).catch(() => {});
+      } catch (error) {
+        if (signal?.aborted || generation !== liveSearchGeneration) return;
+      } finally {
+        if (generation === liveSearchGeneration) amuFlushLiveRender();
+      }
     }
 
     // EXCLUSIVE SINGLE-DRUG SELECTION: Unpins any previously chosen drug and pins ONLY the newly selected drug to #1 (No Popup)
@@ -1506,20 +1890,28 @@
     }
 
     function deduplicateAndDistillFdaDrugs(results, searchKeyword) {
-      const seenGenerics = new Set();
-      const normalized = [];
-
       const sourceQuality = item => (item.dosage_and_administration?.length ? 2 : 0) + (item.dosage_and_administration_table?.length ? 2 : 0);
-      const ordered = [...results].sort((a, b) => sourceQuality(b) - sourceQuality(a) || String(b.effective_time || "").localeCompare(String(a.effective_time || "")));
-      for (const item of ordered) {
-        const rawGeneric = item.openfda?.generic_name?.[0];
-        if (!rawGeneric) continue;
-        if (isNonAntimicrobialNoise(rawGeneric)) continue;
-
+      const betterLabel = (candidate, incumbent) => {
+        const quality = sourceQuality(candidate) - sourceQuality(incumbent);
+        if (quality) return quality > 0;
+        return String(candidate.effective_time || "").localeCompare(String(incumbent.effective_time || "")) > 0;
+      };
+      // One pass keeps the strongest label per product. Sorting every raw SPL
+      // first repeated the same comparisons across manufacturer duplicates.
+      const bestByProduct = new Map();
+      for (const item of results || []) {
+        const rawGeneric = item?.openfda?.generic_name?.[0];
+        if (!rawGeneric || isNonAntimicrobialNoise(rawGeneric)) continue;
         const genericKey = normalizeBaseDrugName(rawGeneric).toUpperCase().trim() || rawGeneric.toUpperCase().trim();
         const productKey = fdaProductStructureKey(item, genericKey);
-        if (seenGenerics.has(productKey)) continue;
-        seenGenerics.add(productKey);
+        const incumbent = bestByProduct.get(productKey);
+        if (!incumbent || betterLabel(item, incumbent)) bestByProduct.set(productKey, item);
+      }
+      const normalized = [];
+      for (const item of bestByProduct.values()) {
+        const rawGeneric = item.openfda.generic_name[0];
+        const genericKey = normalizeBaseDrugName(rawGeneric).toUpperCase().trim() || rawGeneric.toUpperCase().trim();
+        const productKey = fdaProductStructureKey(item, genericKey);
 
         const id = productKey.toUpperCase().replace(/[^A-Z0-9]/g, "_");
         const brandName = item.openfda?.brand_name?.[0] || "";
@@ -4893,7 +5285,7 @@
     function renderWithCombos(cards, renal) {
       const scored = cards.map((d, i) => ({ d, i, a: contraAssess(d, renal) }));
       const pinned = scored.filter(x => x.d.isSelectedPinned);
-      const rest = scored.filter(x => !x.d.isSelectedPinned).sort((x, y) => x.a.s - y.a.s || x.i - y.i);
+      const rest = scored.filter(x => !x.d.isSelectedPinned).sort((x, y) => x.a.s - y.a.s || (x.d.diversityRank ?? x.i) - (y.d.diversityRank ?? y.i));
       const clean = rest.filter(x => x.a.s < 1), rel = rest.filter(x => x.a.s >= 1 && x.a.s < 2), abs = rest.filter(x => x.a.s >= 2);
       const top = [...pinned, ...(clean.length ? clean : rel)];
       const mini = clean.length ? [...rel, ...abs] : abs;

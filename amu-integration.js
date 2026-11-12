@@ -207,7 +207,7 @@
       cancelRunning();previousEngine?.cancelAnalyses();engine=next; generation++; analyses.clear(); jobs=[]; overrides=Object.create(null); fieldErrors.clear();
       calculationJob++; calculationState={key:null,status:'inactive',result:null};automaticDemand={scope:null,required:[],renalFields:[]};
       if (!modulesLoaded) {
-        await loadScript('./amu-ui.js?v=1.2.0');
+        await loadScript('./amu-ui.js?v=20261112-legal');
         await loadScript('./amu-resistance.js');
         modulesLoaded=true;
         root.AMU_legacyDebugRegimens=root.AMU_debugRegimens;
@@ -371,8 +371,8 @@
     let calculationPanel=null;
     if(Object.values(defs).some(def=>def.ui?.group==='renal_calculation')){
       const details=document.createElement('details');details.id='amuRenalCalculator';details.className='p-2 rounded-lg bg-white text-slate-800 border border-purple-300 text-[11px]';
-      const summary=document.createElement('summary');summary.className='cursor-pointer font-bold text-purple-900';summary.textContent='Renal equation inputs — automatic when needed';
-      const note=document.createElement('p');note.className='mt-2';note.textContent='Age and weight come from the filters above. Add the equation inputs here; a compatible entered measurement takes precedence. Values stay in this page only.';
+      const summary=document.createElement('summary');summary.className='cursor-pointer font-bold text-purple-900';summary.textContent='Optional equation inputs for a CrCl text branch';
+      const note=document.createElement('p');note.className='mt-2';note.textContent='Age and weight come from the branch parameters above. A result is used only to select monograph sentences that name CrCl. It does not recommend a dose, and it does not convert eGFR into CrCl. A CrCl typed in the renal text filter takes precedence. Values stay in this page only.';
       calculationPanel=document.createElement('div');calculationPanel.className='grid grid-cols-1 gap-2 mt-2';
       const status=document.createElement('div');status.id='amuRenalCalculationStatus';status.className='mt-2 leading-relaxed';status.setAttribute('role','status');
       details.append(summary,note,calculationPanel,status);byId('renalMetricStatus').insertAdjacentElement('afterend',details);

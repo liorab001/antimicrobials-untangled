@@ -67,15 +67,15 @@
               const rate = Number.isFinite(rawRate) && rawRate >= 0 && rawRate <= 100 ? rawRate : null;
               let barColor = "bg-emerald-500";
               let badgeColor = "bg-emerald-100 text-emerald-800 border-emerald-200";
-              let clinicalLabel = `Low resistance (<${mediumThreshold}% reference benchmark)`;
+              let clinicalLabel = `Illustrative figure below ${mediumThreshold}%. Not an official rate and not a susceptibility finding.`;
               if (rate !== null && rate >= highThreshold) {
                 barColor = "bg-rose-600";
                 badgeColor = "bg-rose-100 text-rose-900 border-rose-300";
-                clinicalLabel = `High resistance (≥${highThreshold}% reference benchmark)`;
+                clinicalLabel = `Illustrative figure at or above ${highThreshold}%. Not an official rate and not an instruction.`;
               } else if (rate !== null && rate >= mediumThreshold) {
                 barColor = "bg-amber-500";
                 badgeColor = "bg-amber-100 text-amber-900 border-amber-300";
-                clinicalLabel = `Moderate resistance (${mediumThreshold}–${highThreshold}% reference benchmark)`;
+                clinicalLabel = `Illustrative figure between ${mediumThreshold}% and ${highThreshold}%. Not an official rate.`;
               }
 
               if (rate === null) clinicalLabel = "No reference rate for the selected region";
@@ -88,7 +88,7 @@
                     </div>
                     <div class="flex items-center gap-2">
                       <span class="text-[11px] font-bold ${d.direction === 'up' ? 'text-rose-600' : (d.direction === 'down' ? 'text-emerald-600' : 'text-slate-500')}">${esc(d.trend5Yr)} (5yr)</span>
-                      <span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ${badgeColor}">${rate === null ? "Unavailable" : rate + "% Ref Rate"}</span>
+                      <span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ${badgeColor}">${rate === null ? "Unavailable" : rate + "% illustrative"}</span>
                     </div>
                   </div>
                   <div class="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
@@ -96,7 +96,7 @@
                   </div>
                   <div class="flex items-center justify-between text-[10px] text-slate-500">
                     <span>${clinicalLabel}</span>
-                    <span class="font-mono text-slate-400">Ref Trajectory: ${esc((d.history || []).map(h => h + '%').join(' → '))}</span>
+                    <span class="font-mono text-slate-400">Illustration trace: ${esc((d.history || []).map(h => h + '%').join(' → '))}</span>
                   </div>
                 </div>
               `;
@@ -104,6 +104,62 @@
           </div>
         </article>
       `).join("");
+    }
+
+    function europePmcLicenseDeed(raw) {
+      const value = String(raw || "").trim();
+      if (!value) return null;
+      if (/^https?:\/\//i.test(value)) return { label: "License link returned by Europe PMC", url: value };
+      const statedVersion = (value.match(/\b(1\.0|2\.0|2\.5|3\.0|4\.0)\b/) || [])[1] || "";
+      const token = value.toLowerCase().replace(/[_-]+/g, " ").replace(/\b(?:1\.0|2\.0|2\.5|3\.0|4\.0)\b/g, "").replace(/\s+/g, " ").trim();
+      const families = {
+        "cc by": ["CC BY", "by"],
+        "cc by nc": ["CC BY-NC", "by-nc"],
+        "cc by sa": ["CC BY-SA", "by-sa"],
+        "cc by nc sa": ["CC BY-NC-SA", "by-nc-sa"],
+        "cc by nd": ["CC BY-ND", "by-nd"],
+        "cc by nc nd": ["CC BY-NC-ND", "by-nc-nd"],
+        "cc0": ["CC0", "zero"],
+        "cc 0": ["CC0", "zero"]
+      };
+      const family = families[token];
+      if (!family) return { label: value, url: "" };
+      if (family[1] === "zero") return { label: "CC0 1.0", url: "https://creativecommons.org/publicdomain/zero/1.0/" };
+      const version = statedVersion || "4.0";
+      const label = statedVersion
+        ? `${family[0]} ${statedVersion}`
+        : `${family[0]} 4.0 (record did not state a version; 4.0 deed linked)`;
+      return { label, url: `https://creativecommons.org/licenses/${family[1]}/${version}/` };
+    }
+
+    function europePmcAttribution(paper) {
+      const title = String(paper.title || "Title not returned").replace(/<[^>]*>/g, "");
+      const authors = String(paper.authorString || "").replace(/<[^>]*>/g, "").trim() || "Creator names were not returned by Europe PMC";
+      const doi = String(paper.doi || "").replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, "").trim();
+      const pmcid = String(paper.pmcid || "").toUpperCase();
+      const pmid = String(paper.pmid || "").replace(/\D/g, "");
+      let href = "";
+      let label = "";
+      if (/^10\.\S+$/i.test(doi)) {
+        href = "https://doi.org/" + doi;
+        label = "DOI " + doi;
+      } else if (/^PMC\d+$/.test(pmcid)) {
+        href = "https://europepmc.org/article/PMC/" + pmcid;
+        label = pmcid + " on Europe PMC";
+      } else if (pmid) {
+        href = "https://pubmed.ncbi.nlm.nih.gov/" + pmid + "/";
+        label = "PMID " + pmid;
+      }
+      const sourceLink = href
+        ? `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer" class="text-[10px] text-sky-400 hover:underline shrink-0">${esc(label)} ↗</a>`
+        : `<span class="text-[10px] text-slate-500">Source link not returned</span>`;
+      const deed = europePmcLicenseDeed(paper.license);
+      const licenseHtml = !deed
+        ? "No Creative Commons license was returned with this record. Open the source before reusing the text. The bullet below is a shortened extract."
+        : deed.url
+          ? `License: <a href="${esc(deed.url)}" target="_blank" rel="noopener noreferrer" class="underline">${esc(deed.label)}</a>. The bullet below is a shortened extract.`
+          : `License text returned: ${esc(deed.label)}. Open the source before reusing the text. The bullet below is a shortened extract.`;
+      return { title, authors, sourceLink, licenseHtml };
     }
 
     async function fetchLiveSurveillancePapers(customQuery) {
@@ -134,22 +190,25 @@
             const cleanAbstract = (p.abstractText || "Open-Access metadata record.").replace(/<[^>]*>/g, "");
             const summaryBullet = extractCleanSentence(cleanAbstract, "resistance", 155);
             const showFullAbs = cleanAbstract.length > summaryBullet.length + 30;
+            const attribution = europePmcAttribution(p);
             return `
               <div class="p-3 rounded-lg bg-slate-800/90 border border-slate-700 space-y-2 text-xs">
                 <div class="flex items-center justify-between gap-2 flex-wrap">
                   <span class="text-[9px] font-bold bg-emerald-950 text-emerald-300 px-2 py-0.5 rounded border border-emerald-700">
-                    <i class="fa-solid fa-lock-open mr-1"></i>Open Access Verified
+                    <i class="fa-solid fa-lock-open mr-1"></i>Open-access record
                   </span>
-                  ${p.pmid ? `<a href="https://pubmed.ncbi.nlm.nih.gov/${String(p.pmid).replace(/\D/g, "")}/" target="_blank" rel="noopener noreferrer" class="text-[10px] text-sky-400 hover:underline shrink-0">PMID: ${String(p.pmid).replace(/\D/g, "")} ↗</a>` : ''}
+                  ${attribution.sourceLink}
                 </div>
-                <div class="text-[10px] text-slate-400">${esc(p.journalTitle || "OA Journal")} (${esc(p.pubYear || "Recent")})</div>
-                <h4 class="font-bold text-white text-[11px] leading-snug">${esc(String(p.title || "").replace(/<[^>]*>/g, ""))}</h4>
+                <div class="text-[10px] text-slate-300 leading-snug"><span class="text-slate-500">Creators:</span> ${esc(attribution.authors)}</div>
+                <div class="text-[10px] text-slate-400">${esc(p.journalTitle || "Journal not returned")} (${esc(p.pubYear || "Year not returned")})</div>
+                <h4 class="font-bold text-white text-[11px] leading-snug">${esc(attribution.title)}</h4>
+                <div class="text-[10px] text-sky-300 leading-snug">${attribution.licenseHtml}</div>
                 <div class="p-2 rounded bg-slate-900/90 border border-slate-700 text-[11px] text-slate-300">
-                  <span class="text-amber-400 font-bold">• Distilled OA Finding:</span> ${esc(summaryBullet)}
+                  <span class="text-amber-400 font-bold">Shortened extract:</span> ${esc(summaryBullet)}
                 </div>
                 ${showFullAbs ? `
                   <button onclick="toggleFullArticle('pmc_abs_${idx}', this)" class="text-[10px] text-blue-400 hover:underline font-semibold">
-                    <i class="fa-solid fa-book-open mr-1"></i>View Open-Access Abstract
+                    <i class="fa-solid fa-book-open mr-1"></i>View returned abstract text
                   </button>
                   <div id="pmc_abs_${idx}" class="hidden p-2 rounded bg-slate-950 text-[11px] text-slate-400 leading-relaxed max-h-40 overflow-y-auto custom-scroll">
                     ${esc(cleanAbstract)}

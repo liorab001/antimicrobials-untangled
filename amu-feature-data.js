@@ -4705,10 +4705,10 @@ window.AMU_FEATURE_DEFAULTS = {
     },
     "resistanceSettings": {
       "regions": {
-        "eu": "EU / EEA",
-        "ce": "Central Europe",
-        "us": "N. America",
-        "global": "Global"
+        "eu": "EU/EEA illustrative benchmark",
+        "ce": "Central Europe illustrative benchmark",
+        "us": "North America illustrative benchmark",
+        "global": "Global illustrative benchmark"
       },
       "gramFilters": {
         "all": "All bacteria",

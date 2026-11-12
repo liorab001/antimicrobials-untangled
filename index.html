@@ -6,7 +6,7 @@
   <meta http-equiv="Content-Security-Policy" content="form-action &#39;none&#39;; default-src &#39;self&#39; https: data: blob: &#39;unsafe-inline&#39; &#39;unsafe-eval&#39;; connect-src &#39;self&#39; https://api.fda.gov https://rxnav.nlm.nih.gov https://www.ebi.ac.uk; worker-src &#39;self&#39; blob:; object-src &#39;none&#39;; base-uri &#39;none&#39;">
   <title>Antimicrobials Untangled v1.18 — Modular Prototype</title>
   <link rel="stylesheet" href="./amu-styles.css?v=20261110">
-  <link rel="preload" href="./amu-ui.js?v=1.2.0" as="script">
+  <link rel="preload" href="./amu-ui.js?v=20261112-legal" as="script">
   <link rel="preload" href="./amu-resistance.js" as="script">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer">
   <style>
@@ -105,33 +105,42 @@
 
       <div class="space-y-3 text-xs text-slate-700 leading-relaxed">
         <div class="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-950">
-          <strong>1. NOT A MEDICAL DEVICE (EU MDR 2017/745 &amp; US FDA CDS Safe Harbor):</strong>
-          <em>Antimicrobials Untangled</em> is an independent medical student software engineering demonstrator and educational informatics sandbox. It is <strong>NOT a certified Medical Device (MDSW)</strong> under Regulation (EU) 2017/745 or MDCG 2019-11, nor is it cleared for clinical practice. It must <strong>NEVER</strong> be used to diagnose, treat, cure, prevent, or guide prescribing decisions for any real patient.
+          <strong>1. NOT A MEDICAL DEVICE, AND NOT FDA NON-DEVICE CDS:</strong>
+          <em>Antimicrobials Untangled</em> is an independent academic software portfolio and a document-inspection sandbox. It is <strong>not a certified medical device (MDSW)</strong> under Regulation (EU) 2017/745 or MDCG 2019-11. It is <strong>not offered as Non-Device CDS</strong> under FD&amp;C Act § 520(o)(1)(E): that safe harbor is limited to recommendations intended for health care professionals, and this public page is an academic sandbox. It must <strong>never</strong> be used to diagnose, treat, cure, prevent, or guide prescribing for any real patient. A color on parsed text is an inspection flag. It is not a statement that a regimen is safe, standard, or appropriate.
         </div>
 
         <div class="p-3 rounded-lg bg-slate-50 border border-slate-200">
-          <strong>2. ALGORITHMIC PARSING &amp; SELF-REGULATION LIMITATIONS:</strong>
-          Bullet-point summaries, search interpretations, pathogen-disease filters, renal dosage highlights, and interaction badges are generated automatically by experimental client-side text-parsing heuristics. Automated parsing can omit, misclassify, or truncate vital clinical context. Users must always inspect the complete official manufacturer monograph.
+          <strong>2. EXPERIMENTAL TEXT PARSING:</strong>
+          Bullet summaries, search interpretations, pathogen–syndrome indexes, renal text-branch highlights, and interaction flags are produced by experimental client-side text parsing. Parsing can omit, misclassify, or truncate the source. A missing flag is not a safety finding. Read the complete official monograph before treating any sentence as the label's meaning.
         </div>
 
         <div class="p-3 rounded-lg bg-slate-50 border border-slate-200 space-y-1.5">
-          <strong>3. OFFICIAL PUBLIC DATA ATTRIBUTIONS, OPEN-ACCESS COMPLIANCE &amp; NON-ENDORSEMENT:</strong>
+          <strong>3. SOURCE ATTRIBUTIONS AND NON-ENDORSEMENT:</strong>
           <ul class="list-disc pl-4 space-y-1 text-[11px] text-slate-600">
-            <li><strong>U.S. FDA (openFDA):</strong> Data provided by the U.S. Food and Drug Administration (<span class="font-mono">https://open.fda.gov</span> — CC0 1.0 Public Domain). <em>"Do not rely on openFDA to make decisions regarding medical care. Always speak to your health provider about the risks and benefits of FDA-regulated products."</em></li>
+            <li><strong>U.S. FDA (openFDA):</strong> Data provided by the U.S. Food and Drug Administration (<span class="font-mono">https://open.fda.gov</span> — CC0 1.0). <em>"Do not rely on openFDA to make decisions regarding medical care. Always speak to your health provider about the risks and benefits of FDA-regulated products."</em></li>
             <li><strong>NIH National Library of Medicine (NLM):</strong> <em>"This product uses publicly available data from the U.S. National Library of Medicine (NLM), National Institutes of Health, Department of Health and Human Services; NLM is not responsible for the product and does not endorse or recommend this or any other product."</em></li>
-            <li><strong>Europe PMC (Open-Access Only):</strong> Literature queries are restricted to Open-Access articles to exclude paywalled or subscription abstracts. Zero affiliation or endorsement from EMBL-EBI, ECDC, WHO, CDC, IDSA, or NICE.</li>
+            <li><strong>Europe PMC:</strong> Queries are limited to the Open-Access subset so paywalled abstracts are not displayed. Each card must be read with its own authors, title, Creative Commons license, and source link. A footer notice does not replace that attribution. EMBL-EBI does not endorse this project.</li>
+            <li><strong>WHO and ECDC:</strong> Static resistance figures on the surveillance page are educational illustrations stored in this repository. They are not a verbatim WHO GLASS or ECDC EARS-Net table, no report year is stored with them, and they must not be cited as official WHO or ECDC statistics. WHO and ECDC do not endorse this project.</li>
+            <li><strong>Educational indexes:</strong> Pathogen, syndrome, and drug-association lists are an educational index compiled for this sandbox. They are not represented as a copy of the Sanford Guide, UpToDate, Amboss, or any other commercial database.</li>
           </ul>
         </div>
 
-        <div class="p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-950">
-          <strong>4. STATELESS ZERO-PII ARCHITECTURE &amp; LIABILITY EXEMPTION:</strong>
-          Runs 100% statelessly in temporary browser memory with <strong>no user accounts, no cookies, and no database storage</strong>. An active client-side firewall blocks personally identifiable information (PII). Provided strictly free of charge outside commercial activity under the <strong>MIT License ("AS IS", WITHOUT WARRANTY OF ANY KIND)</strong> and exempt under Article 2(2) of Directive (EU) 2024/2853.
+        <div class="p-3 rounded-lg bg-sky-50 border border-sky-200 text-sky-950 space-y-1.5">
+          <strong>4. PRIVACY AND NETWORK DISCLOSURE:</strong>
+          <p>The developer runs no backend server, sets no cookies, and keeps no account or search database.</p>
+          <p>This static site is hosted by GitHub, Inc., so a visit sends the browser's IP address to GitHub Pages.</p>
+          <p>A search or literature poll sends the IP address and the search text directly from the browser to api.fda.gov, NIH hosts including rxnav.nlm.nih.gov, and www.ebi.ac.uk, and the page loads an icon stylesheet from cdnjs.cloudflare.com. Those operators, not the developer, receive that traffic, including possible transfers outside the EEA.</p>
+        </div>
+
+        <div class="p-3 rounded-lg bg-slate-50 border border-slate-200">
+          <strong>5. MIT NOTICE AND WHAT IT DOES NOT WAIVE:</strong>
+          The source code is released free of charge, outside commercial activity, under the MIT License ("AS IS", without warranty). Article 2(2) of Directive (EU) 2024/2853 can exempt that kind of free and open-source software from the Directive's no-fault product liability. Article 2(4) preserves national fault-based negligence law. An "AS IS" notice cannot waive liability for bodily injury or death. Hosting this page is not the same thing as only publishing a source repository. The click-through records that this sandbox is not a basis for patient care.
         </div>
       </div>
 
       <label class="flex items-start gap-2.5 p-3 rounded-xl bg-slate-100 border border-slate-300 cursor-pointer text-xs font-semibold text-slate-900">
         <input type="checkbox" id="legalConsentCheck" onchange="document.getElementById(&#39;enterSandboxBtn&#39;).disabled = !this.checked" class="mt-0.5 rounded text-blue-600">
-        <span>I confirm that I am viewing <em>Antimicrobials Untangled</em> solely as an academic software portfolio demonstration, I will NOT use it for clinical patient care, and I accept the MIT "AS IS" no-warranty terms.</span>
+        <span>I am viewing <em>Antimicrobials Untangled</em> only as an academic portfolio demonstration. I will not use it for clinical patient care. I have read the hosting and third-party API disclosure, and I understand the MIT notice does not waive liability for bodily injury or death.</span>
       </label>
 
       <div class="flex justify-end">
@@ -171,7 +180,7 @@
     <div class="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
       <div class="flex items-center gap-2">
         <span class="bg-rose-600 text-white text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded">Non-Clinical Sandbox</span>
-        <span><strong>Antimicrobials Untangled:</strong> Educational demo only. Not a medical device. Public data via U.S. FDA, NIH NLM &amp; Europe PMC Open Access (unaffiliated).</span>
+        <span><strong>Antimicrobials Untangled:</strong> Academic document sandbox. Not a medical device and not FDA CDS. No accounts stored here. Host and API disclosure is in the footer.</span>
       </div>
       <button onclick="document.getElementById(&#39;legalGateModal&#39;).classList.remove(&#39;hidden&#39;)" class="underline text-rose-300 hover:text-white text-left sm:text-right shrink-0 font-semibold">
         Legal &amp; API Notices
@@ -198,7 +207,7 @@
             <div class="flex items-center gap-2 flex-wrap">
               <h1 class="text-lg font-extrabold tracking-tight text-white">Antimicrobials Untangled</h1>
               <span class="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] px-2 py-0.5 rounded-full font-semibold flex items-center gap-1">
-                <i class="fa-solid fa-user-lock text-[9px]"></i> Zero-PII &amp; Open-Access Verified
+                <i class="fa-solid fa-user-lock text-[9px]"></i> No accounts stored here
               </span>
             </div>
             <p class="text-[11px] text-slate-400">Pathogen • Syndrome/Disease • Drug/Drug Group</p>
@@ -240,7 +249,7 @@
   <!-- ======================================================================= -->
   <details id="amuFieldsPanel" class="mx-4 my-3 p-3 bg-white border border-slate-300 rounded-xl text-xs">
     <summary class="cursor-pointer font-bold text-slate-700">Database-defined branch fields <span id="amuFieldCount"></span></summary>
-    <p class="my-2 text-slate-500">Hypothetical sandbox inputs stay in memory. Page controls supply the existing fields. Enable a label-interpreter override to replace a page value; an empty override means unknown. Legacy reference panels continue to follow the page controls. New fields appear from the database automatically.</p>
+    <p class="my-2 text-slate-500">These are monograph text-branch filters. Values stay in memory for this tab and are not a patient chart. Page controls supply the existing fields. Enable a label-interpreter override to replace a page value; an empty override means unknown. Legacy reference panels continue to follow the page controls. New fields appear from the database automatically.</p>
     <div id="amuFieldControls" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
     <button id="amuResetFields" type="button" class="mt-3 px-3 py-1 border rounded">Clear branch-field overrides</button>
   </details>
@@ -251,15 +260,16 @@
 
       <!-- Risk & Self-Regulation Color Legend -->
       <section class="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm space-y-2">
-        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Bullet Risk &amp; Self-Regulation Legend</span>
-        <div class="grid grid-cols-2 gap-1.5 text-[11px]">
-          <div class="flex items-center gap-1.5 text-rose-800 font-semibold"><span class="w-2.5 h-2.5 rounded-full bg-rose-500 shrink-0"></span>High Risk / Contra</div>
-          <div class="flex items-center gap-1.5 text-amber-800 font-semibold"><span class="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0"></span>Caution / Titrate</div>
-          <div class="flex items-center gap-1.5 text-blue-800 font-semibold"><span class="w-2.5 h-2.5 rounded-full bg-blue-500 shrink-0"></span>Standard Regimen</div>
-          <div class="flex items-center gap-1.5 text-emerald-800 font-semibold"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0"></span>Low Risk / Safe</div>
-          <div class="col-span-2 flex items-center gap-1.5 text-purple-900 font-bold bg-purple-50 p-1.5 rounded border border-purple-200">
+        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Parsed-text color legend</span>
+        <p class="text-[10px] text-slate-500 leading-snug">Colors mark phrases the experimental parser detected in retrieved text. They are not a safety, risk, or dosing judgment. Green means no flag was detected in the parsed excerpt.</p>
+        <div class="grid grid-cols-1 gap-1.5 text-[11px]">
+          <div class="flex items-center gap-1.5 text-rose-800 font-semibold"><span class="w-2.5 h-2.5 rounded-full bg-rose-500 shrink-0"></span>Parsed caution phrase</div>
+          <div class="flex items-center gap-1.5 text-amber-800 font-semibold"><span class="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0"></span>Parsed adjustment phrase</div>
+          <div class="flex items-center gap-1.5 text-blue-800 font-semibold"><span class="w-2.5 h-2.5 rounded-full bg-blue-500 shrink-0"></span>Unflagged Label Text</div>
+          <div class="flex items-center gap-1.5 text-emerald-800 font-semibold"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0"></span>No Flag Detected in Parsed Text</div>
+          <div class="flex items-center gap-1.5 text-purple-900 font-bold bg-purple-50 p-1.5 rounded border border-purple-200">
             <i class="fa-solid fa-eye text-purple-600"></i>
-            <span>Purple Flag = Complex Text (Hover Preview / Click Full Text)</span>
+            <span>Purple flag = complex text (hover preview / click full text)</span>
           </div>
         </div>
       </section>
@@ -268,7 +278,7 @@
       <section class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3.5">
         <div class="flex items-center justify-between border-b border-slate-100 pb-2">
           <h2 class="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-            <i class="fa-solid fa-sliders text-blue-600"></i> Simulated Clinical Filters
+            <i class="fa-solid fa-sliders text-blue-600"></i> Monograph text-branch filters
           </h2>
           <button onclick="resetAllergies()" class="text-[11px] text-blue-600 hover:underline font-medium">Reset All</button>
         </div>
@@ -276,7 +286,7 @@
         <!-- RENAL MEASUREMENT SELECTOR: direct measurements; explicit standard-dose assumption for normal eGFR only -->
         <div id="renalToggleWrapper" class="p-3 rounded-xl bg-slate-900 text-white border-2 border-fuchsia-500/80 shadow-md space-y-2 transition-all">
           <div class="flex items-center justify-between gap-2">
-            <span class="text-xs font-extrabold tracking-wide text-fuchsia-200"><i class="fa-solid fa-kidneys text-fuchsia-400 mr-1"></i>Kidney Function</span>
+            <span class="text-xs font-extrabold tracking-wide text-fuchsia-200"><i class="fa-solid fa-kidneys text-fuchsia-400 mr-1"></i>Renal text filter</span>
             <label class="renal-metric-selector font-bold" data-metric="egfr">
               <span class="renal-metric-option renal-option-egfr" aria-hidden="true">eGFR</span>
               <input id="useCrClInput" type="checkbox" role="switch" aria-label="Use CrCl instead of eGFR" aria-describedby="renalMetricStatus" onchange="syncRenalMetric()">
@@ -296,7 +306,7 @@
             <div class="flex flex-wrap gap-1"><button type="button" onclick="syncCrCl(120)" class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-700 hover:bg-amber-600 text-slate-100">≥90</button><button type="button" onclick="syncCrCl(75)" class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-700 hover:bg-amber-600 text-slate-100">60–89</button><button type="button" onclick="syncCrCl(45)" class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-700 hover:bg-amber-600 text-slate-100">30–59</button><button type="button" onclick="syncCrCl(22)" class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-700 hover:bg-amber-600 text-slate-100">15–29</button><button type="button" onclick="syncCrCl(8)" class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-700 hover:bg-amber-600 text-slate-100">&lt;15</button></div>
             <div id="crclStage" class="text-[11px] font-bold text-amber-200">Enter CrCl to evaluate CrCl-specific FDA label branches.</div>
           </div>
-          <div id="renalMetricStatus" class="text-[10px] text-slate-300" aria-live="polite">eGFR input selected. With normal eGFR (90–130) and no dialysis, standard renal function is assumed when CrCl is unavailable.</div>
+          <div id="renalMetricStatus" class="text-[10px] text-slate-300" aria-live="polite">eGFR text filter selected. A blank CrCl, with eGFR 90–130 and no dialysis, selects the ordinary-function label text. It does not convert eGFR into CrCl and does not recommend a dose.</div>
           <div class="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-200">
             <label class="flex items-center gap-1 cursor-pointer"><input type="radio" name="rrtMode" value="none" checked="" onchange="syncRenalMetric()"> No dialysis</label>
             <label class="flex items-center gap-1 cursor-pointer"><input type="radio" name="rrtMode" value="hd" onchange="syncRenalMetric()"> Intermittent HD</label>
@@ -304,13 +314,13 @@
             <label class="flex items-center gap-1 cursor-pointer"><input type="radio" name="rrtMode" value="capd" onchange="syncRenalMetric()"> Peritoneal dialysis (CAPD)</label>
           </div>
           <input type="checkbox" id="renalFlag" class="hidden">
-          <p class="text-[10px] text-slate-300 leading-snug">Use the switch to edit the available measurements. Entered values remain available to their matching label branches. eGFR is reported in mL/min/1.73 m²; CrCl is entered separately in mL/min. No numeric conversion is applied. If CrCl is unavailable, eGFR 90–130 and no dialysis allow standard dosing with an explicit normal-function assumption. Other eGFR values do not establish CrCl. Dialysis requires its own label branch.</p>
+          <p class="text-[10px] text-slate-300 leading-snug">FDA Monograph Branch Explorer. These values are text-filter parameters: they choose which monograph sentences are shown. eGFR is entered in mL/min/1.73 m² and CrCl is entered separately in mL/min. No numeric conversion is applied. A blank CrCl does not become a CrCl. eGFR 90–130 with no dialysis only selects label text that is not limited to renal impairment. Any other eGFR leaves CrCl-specific sentences unmatched. Dialysis selects only a dialysis-labelled branch. Nothing here calculates a dose.</p>
         </div>
 
-        <!-- PATIENT PROFILE (v1.3) -->
+        <!-- MONOGRAPH BRANCH PARAMETERS -->
         <div class="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2 text-xs">
           <div class="flex items-center justify-between">
-            <b class="text-slate-700 uppercase tracking-wider text-[11px]">Patient Profile</b>
+            <b class="text-slate-700 uppercase tracking-wider text-[11px]">Branch parameters</b>
             <button id="unitBtn" onclick="toggleUnits()" class="text-[11px] font-bold text-blue-600 underline">Metric (kg)</button>
           </div>
           <label class="block">Age
@@ -318,7 +328,7 @@
             <input id="ageRng" type="range" min="0" max="100" step="0.01" value="40" oninput="syncPt(&#39;age&#39;,this.value)" class="w-full">
           </label>
           <div id="neonatalContextGroup" class="hidden rounded-lg border border-amber-200 bg-amber-50 p-2 space-y-2">
-            <div class="text-[10px] font-bold uppercase tracking-wide text-amber-900">Neonatal dosing context (when required by the FDA label)</div>
+            <div class="text-[10px] font-bold uppercase tracking-wide text-amber-900">Neonatal label-text branch (only if that label names age)</div>
             <div class="grid grid-cols-2 gap-2">
               <label class="text-[11px] text-amber-950">Gestational age at birth (weeks)
                 <input id="gaWeeksInput" type="number" min="20" max="45" step="0.1" placeholder="e.g. 32" oninput="syncNeonatal(&#39;ga&#39;,this.value)" class="w-full border border-amber-300 rounded px-2 py-1 text-xs">
@@ -327,18 +337,18 @@
                 <input id="pnaDaysInput" type="number" min="0" max="120" step="1" placeholder="e.g. 5" oninput="syncNeonatal(&#39;pna&#39;,this.value)" class="w-full border border-amber-300 rounded px-2 py-1 text-xs">
               </label>
             </div>
-            <div class="text-[10px] text-amber-800">Only use these fields when the selected label explicitly differentiates gestational age and postnatal age.</div>
+            <div class="text-[10px] text-amber-800">These fields apply only when the selected label text itself distinguishes gestational age and postnatal age. They do not calculate a neonatal dose.</div>
           </div>
           <label class="block">Weight
             <input id="wtNum" type="number" min="0" step="0.1" value="70" oninput="syncPt(&#39;wt&#39;,this.value)" class="w-16 border border-slate-300 rounded px-1 ml-1"> <span id="wtUnit">kg</span>
             <input id="wtRng" type="range" min="2" max="200" step="0.5" value="70" oninput="syncPt(&#39;wt&#39;,this.value)" class="w-full">
           </label>
           <div id="ptNote" class="text-[10px] text-slate-500"></div>
-          <p class="text-[10px] text-slate-400">Type a value for neonates (e.g. 0.05 yr ≈ 2.5 weeks).</p>
-          <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="ptPreg" onchange="reFilterCurrentResults()" class="rounded"> Pregnancy</label>
-          <label class="block text-[11px]">Hepatic function (Child-Pugh)
+          <p class="text-[10px] text-slate-400">A fractional year opens an age branch in the label text (for example 0.05 yr). It is a filter, not a patient chart.</p>
+          <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="ptPreg" onchange="reFilterCurrentResults()" class="rounded"> Pregnancy text filter</label>
+          <label class="block text-[11px]">Hepatic text filter (Child-Pugh band)
             <select id="ptHepClass" onchange="reFilterCurrentResults()" class="mt-1 w-full border border-slate-300 rounded px-2 py-1 text-xs bg-white">
-              <option value="none">Not specified / no known impairment</option>
+              <option value="none">Hepatic band not selected</option>
               <option value="A">Class A — mild</option>
               <option value="B">Class B — moderate</option>
               <option value="C">Class C — severe</option>
@@ -348,26 +358,26 @@
 
         <!-- Penicillin / Beta-Lactam Status -->
         <div class="space-y-1 bg-slate-50 p-2.5 rounded-lg border border-slate-200/80">
-          <label class="text-xs font-bold text-slate-700 block">Penicillin / Beta-Lactam Allergy</label>
+          <label class="text-xs font-bold text-slate-700 block">Penicillin / beta-lactam class filter</label>
           <div class="space-y-1 text-xs pt-1">
             <label class="flex items-center gap-2 cursor-pointer">
               <input type="radio" name="pcnStatus" value="none" checked="" onchange="reFilterCurrentResults()" class="text-blue-600">
-              <span>No Beta-Lactam Allergy</span>
+              <span>No beta-lactam class selected</span>
             </label>
             <label class="flex items-center gap-2 cursor-pointer text-amber-900">
               <input type="radio" name="pcnStatus" value="mild" onchange="reFilterCurrentResults()" class="text-amber-600">
-              <span>Mild Rash <span class="text-slate-400 text-[11px]">(Ceph/Carbapenem caution)</span></span>
+              <span>Mild-rash class filter <span class="text-slate-400 text-[11px]">(flag cephalosporin/carbapenem text)</span></span>
             </label>
             <label class="flex items-center gap-2 cursor-pointer text-rose-900">
               <input type="radio" name="pcnStatus" value="severe" onchange="reFilterCurrentResults()" class="text-rose-600">
-              <span>Severe IgE / SJS <span class="text-slate-400 text-[11px]">(Block all Beta-Lactams)</span></span>
+              <span>Severe-reaction class filter <span class="text-slate-400 text-[11px]">(match beta-lactam text)</span></span>
             </label>
           </div>
         </div>
 
         <!-- Additional Class Allergies -->
         <div class="space-y-1.5">
-          <label class="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Additional Class Allergies</label>
+          <label class="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Additional class-text filters</label>
           <div class="grid grid-cols-2 gap-1.5 text-xs">
             <label class="flex items-center gap-1.5 p-1.5 rounded border border-slate-200 hover:bg-slate-50 cursor-pointer">
               <input type="checkbox" id="alg_cephalosporin" onchange="reFilterCurrentResults()" class="rounded text-rose-600">
@@ -409,9 +419,9 @@
       <section class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
         <div>
           <h2 class="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-            <i class="fa-solid fa-layer-group text-blue-600"></i> Clinical Directory
+            <i class="fa-solid fa-layer-group text-blue-600"></i> Educational index
           </h2>
-          <p class="text-[11px] text-slate-400 mt-0.5">Browse common Pathogens, Syndromes, or Drugs &amp; Groups:</p>
+          <p class="text-[11px] text-slate-400 mt-0.5">Browse pathogens, syndromes, or drugs and groups. This index was compiled for the sandbox. It is not a commercial guide and it does not score clinical likelihood.</p>
         </div>
         <div class="flex flex-wrap gap-1.5" id="systemTabs"></div>
         <div class="grid grid-cols-1 gap-1.5 pt-1 max-h-72 overflow-y-auto custom-scroll pr-1" id="syndromeList"></div>
@@ -462,7 +472,7 @@
         <div id="drugMainInfectionsBox" class="hidden pt-3 border-t border-slate-100 space-y-2">
           <div class="flex items-center justify-between">
             <span class="text-[10px] font-bold uppercase tracking-wider text-emerald-700 flex items-center gap-1.5">
-              <i class="fa-solid fa-virus-slash"></i> Main Clinical Infections &amp; Indications for This Drug / Group (Click to Switch to Syndrome View):
+              <i class="fa-solid fa-virus-slash"></i> Indexed label indications for this drug / group (educational map; click to open that syndrome):
             </span>
           </div>
           <div id="drugMainInfectionsPills" class="flex flex-wrap gap-1.5"></div>
@@ -472,7 +482,7 @@
         <div id="pathogenDiseaseFilterBox" class="hidden pt-3 border-t border-slate-100 space-y-2">
           <div class="flex items-center justify-between">
             <span class="text-[10px] font-bold uppercase tracking-wider text-indigo-700 flex items-center gap-1.5">
-              <i class="fa-solid fa-bacterium"></i> Clinical Infections Caused by This Pathogen (Click to Filter Regimens):
+              <i class="fa-solid fa-bacterium"></i> Indexed presentations for this pathogen (educational map; click to filter text):
             </span>
             <span id="activeDiseaseSubfilterLabel" class="text-[11px] font-semibold text-slate-500">Showing: All Presentations</span>
           </div>
@@ -485,7 +495,7 @@
       <!-- SYNDROME-ONLY PATHOGEN FILTER -->
       <section id="syndromePathogenFilterBox" class="hidden bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-2.5">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-          <span class="text-[10px] font-extrabold uppercase tracking-wider text-indigo-700 flex items-center gap-1.5"><i class="fa-solid fa-bacterium"></i> Likely Pathogens for This Syndrome</span>
+          <span class="text-[10px] font-extrabold uppercase tracking-wider text-indigo-700 flex items-center gap-1.5"><i class="fa-solid fa-bacterium"></i> Indexed pathogens for this syndrome</span>
           <span id="activeSyndromePathogenLabel" class="text-[11px] text-slate-500">Active filter: All pathogens</span>
         </div>
         <div id="syndromePathogenPills" class="flex flex-wrap gap-1.5"></div>
@@ -507,7 +517,7 @@
       <div id="loadingIndicator" class="hidden bg-white rounded-xl border border-slate-200 p-12 text-center space-y-3 shadow-sm">
         <i class="fa-solid fa-circle-notch fa-spin text-3xl text-blue-600"></i>
         <div class="text-sm font-bold text-slate-700">Untangling FDA Monographs, Microbiology Spectra &amp; NIH Records...</div>
-        <p class="text-xs text-slate-400">Extracting clinical indications, adult/renal dosages, and interaction guardrails.</p>
+        <p class="text-xs text-slate-400">Retrieving monograph text, ingredient associations, and interaction phrases. Retrieval is not a dosing recommendation.</p>
       </div>
 
       <!-- Dynamic Drug Cards / Welcome State Container -->
@@ -517,9 +527,9 @@
       <div id="excludedContainerWrapper" class="hidden space-y-2 pt-4 border-t border-slate-200">
         <div class="flex items-center justify-between">
           <h3 class="text-xs font-bold uppercase tracking-wider text-rose-600 flex items-center gap-1.5">
-            <i class="fa-solid fa-ban"></i> Contraindicated by Simulated Allergy Profile
+            <i class="fa-solid fa-ban"></i> Matched by the allergy-class text filter
           </h3>
-          <span class="text-[11px] text-slate-500">Click any contraindicated drug below to pin its data hub to the top of the list with allergy warnings</span>
+          <span class="text-[11px] text-slate-500">A match means the class filter hit. It is not a clinical contraindication ruling. Click a row to pin that record.</span>
         </div>
         <div id="excludedResultsContainer" class="space-y-2"></div>
       </div>
@@ -536,7 +546,7 @@
       <div class="space-y-1.5">
         <div class="flex items-center gap-2 flex-wrap">
           <span class="bg-emerald-100 text-emerald-900 text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full border border-emerald-300 flex items-center gap-1.5">
-            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span> 24h Daily Poll Active
+            <span class="w-2 h-2 rounded-full bg-emerald-500"></span> Daily literature-index check
           </span>
           <span id="dailyPollTimestamp" class="text-[11px] font-mono bg-slate-100 text-slate-700 px-2 py-0.5 rounded border border-slate-200">
             Syncing Daily Poll...
@@ -547,7 +557,7 @@
         </div>
         <h2 class="text-xl font-bold text-slate-900">Bacterial Resistance Surveillance &amp; Open-Access Literature Poll</h2>
         <p class="text-xs text-slate-500">
-          Combines reference regional epidemiology with an automated <strong>once-daily live poll</strong> of verified <strong>Open-Access</strong> Europe PMC surveillance studies.
+          Shows developer-compiled illustrative percentages beside an automated <strong>once-daily</strong> poll of <strong>Open-Access</strong> Europe PMC records. The percentages are not official surveillance statistics.
         </p>
       </div>
 
@@ -555,10 +565,10 @@
         <div>
           <label class="text-[10px] font-bold uppercase text-slate-400 block mb-1">Reference Benchmark Region</label>
           <select id="regionSelect" onchange="renderResistanceDashboard()" class="bg-slate-100 border border-slate-300 text-slate-800 text-xs font-semibold rounded-lg px-3 py-2">
-            <option value="eu">EU/EEA Benchmark (EARS-Net Ref)</option>
-            <option value="ce">Central Europe Benchmark (CZ/AT/DE Ref)</option>
-            <option value="us">North America Benchmark (CDC Ref)</option>
-            <option value="global">Global Median Benchmark (GLASS Ref)</option>
+            <option value="eu">EU/EEA illustrative benchmark</option>
+            <option value="ce">Central Europe illustrative benchmark</option>
+            <option value="us">North America illustrative benchmark</option>
+            <option value="global">Global illustrative benchmark</option>
           </select>
         </div>
 
@@ -573,6 +583,11 @@
       </div>
     </section>
 
+    <section class="bg-slate-50 p-4 rounded-xl border border-slate-200 text-[11px] text-slate-600 leading-relaxed space-y-2">
+      <p><strong class="text-slate-800">Surveillance attribution.</strong> The percentages and five-year traces on this page are educational illustrations maintained in this repository. They are not a verbatim World Health Organization GLASS dataset and not a verbatim ECDC EARS-Net annual table. No report year is stored with them, so they must not be cited as an official GLASS or EARS-Net rate. WHO GLASS material, if reused elsewhere, stays under CC BY-NC-SA 3.0 IGO and is not sublicensed under the MIT License; WHO's attribution and non-endorsement terms would apply. ECDC reuse of EARS-Net material requires the specific report and year, plus a statement that any adapted figure is the developer's responsibility, not ECDC's. WHO and ECDC do not endorse this project.</p>
+      <p>Words such as "WHO Critical Priority" name a published WHO pathogen category. They are not a copy of the GLASS dataset. Central Europe and North America figures are the same kind of illustration and are not a CDC dataset.</p>
+    </section>
+
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
       <div class="lg:col-span-8 space-y-4" id="resistanceCardsContainer"></div>
 
@@ -585,15 +600,15 @@
               </span>
               <h3 class="text-sm font-bold text-white mt-0.5">Europe PMC OA Surveillance</h3>
             </div>
-            <span class="text-[10px] bg-emerald-950 text-emerald-300 px-2 py-0.5 rounded border border-emerald-700">Zero Paywall Data</span>
+            <span class="text-[10px] bg-emerald-950 text-emerald-300 px-2 py-0.5 rounded border border-emerald-700">Paywalled abstracts excluded</span>
           </div>
 
           <p class="text-[11px] text-slate-400 leading-relaxed">
-            Strictly filters for <strong>Open Access</strong> articles licensed for public viewing. Subscription/paywalled journal abstracts are excluded automatically.
+            Queries add <strong>OPEN_ACCESS:y</strong> so paywalled abstracts are not requested. Each card shows the creators, title, the Creative Commons license returned for that record, and a link to the source. A missing license is stated on the card. The shortened bullet is an extract, not the article.
           </p>
 
           <div class="flex gap-1.5">
-            <input type="text" id="pmcQueryInput" autocomplete="off" placeholder="Search OA resistance papers (NO PII)..." onkeydown="if(event.key === &#39;Enter&#39;) fetchLiveSurveillancePapers()" class="flex-1 bg-slate-800 text-white text-xs rounded-lg px-3 py-1.5 border border-slate-700 focus:outline-none focus:border-blue-500">
+            <input type="text" id="pmcQueryInput" autocomplete="off" placeholder="Search OA resistance papers (no names or identifiers)..." onkeydown="if(event.key === &#39;Enter&#39;) fetchLiveSurveillancePapers()" class="flex-1 bg-slate-800 text-white text-xs rounded-lg px-3 py-1.5 border border-slate-700 focus:outline-none focus:border-blue-500">
             <button onclick="fetchLiveSurveillancePapers()" class="bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg">
               Poll OA
             </button>
@@ -617,10 +632,16 @@
     <div class="max-w-7xl mx-auto space-y-2">
       <div class="flex flex-col md:flex-row md:items-center justify-between gap-2 border-b border-slate-800 pb-2">
         <span class="font-bold text-slate-200">Antimicrobials Untangled — Academic Informatics Sandbox • MIT License ("AS IS" Without Warranty)</span>
-        <span>Zero-Storage Architecture: No Cookies • No Accounts • Client-Side PII Firewall Active</span>
+        <span>No cookies • No accounts • Search-box identifier block active • Code under MIT; third-party data stays under its own license</span>
       </div>
       <p class="leading-relaxed text-[10px] text-slate-500">
-        <strong>Regulatory &amp; Attribution Notice:</strong> Not a medical device under Regulation (EU) 2017/745 (EU MDR) or US FDA regulations. Provided free of charge outside commercial activity (Directive (EU) 2024/2853 Art. 2(2) exempt). Data sourced live from the U.S. Food and Drug Administration (<code>https://open.fda.gov</code> — public domain CC0 1.0; do not rely on openFDA to make decisions regarding medical care), the U.S. National Library of Medicine (NLM, National Institutes of Health, DHHS — NLM is not responsible for the product and does not endorse or recommend this or any other product), and the Europe PMC Open-Access Subset (EMBL-EBI). Unaffiliated with IDSA, NICE, ECDC, CDC, or WHO.
+        <strong>Privacy and network disclosure.</strong> The developer runs no backend server, sets no cookies, and keeps no account or search database. This static site is hosted by GitHub, Inc., so a visit sends the browser's IP address to GitHub Pages. A search or literature poll sends the IP address and the search text directly from the browser to api.fda.gov, NIH hosts including rxnav.nlm.nih.gov, and www.ebi.ac.uk, and the page loads an icon stylesheet from cdnjs.cloudflare.com; those operators, not the developer, receive that traffic, including possible transfers outside the EEA.
+      </p>
+      <p class="leading-relaxed text-[10px] text-slate-500">
+        <strong>Regulatory notice.</strong> Not a medical device under Regulation (EU) 2017/745 or MDCG 2019-11, and not offered as Non-Device CDS under FD&amp;C Act § 520(o)(1)(E), because this public academic sandbox is not limited to health care professionals. Parsed colors are inspection flags, not a statement that a regimen is safe or appropriate. Article 2(2) of Directive (EU) 2024/2853 may exempt free and open-source software developed outside commercial activity from that Directive's no-fault product liability only. It does not displace national fault-based negligence law, and the MIT "AS IS" notice cannot waive liability for bodily injury or death.
+      </p>
+      <p class="leading-relaxed text-[10px] text-slate-500">
+        <strong>Data licenses.</strong> openFDA label text is CC0 1.0. Do not rely on openFDA to make decisions regarding medical care. This product uses publicly available data from the U.S. National Library of Medicine (NLM), National Institutes of Health, Department of Health and Human Services; NLM is not responsible for the product and does not endorse or recommend this or any other product. Europe PMC open-access records remain under each article's own license; the card shows authors, title, license, and source when the API returns them. Static resistance percentages are educational illustrations in this repository. They are not offered as a WHO GLASS (CC BY-NC-SA 3.0 IGO) or ECDC EARS-Net dataset and are not sublicensed as one. WHO, ECDC, EMBL-EBI, CDC, IDSA, and NICE do not endorse this project. The pathogen and syndrome indexes are an educational compilation for this sandbox and are not offered as a commercial antimicrobial database.
       </p>
       <p class="text-center text-xs text-slate-300 pt-2 border-t border-slate-800">Created by <strong id="authorName">Lior Abecassis</strong></p>
     </div>

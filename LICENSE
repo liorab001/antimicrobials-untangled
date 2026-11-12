@@ -19,3 +19,62 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+-------------------------------------------------------------------------------
+DATA AND THIRD-PARTY MATERIALS — NOT COVERED BY THE MIT GRANT ABOVE
+-------------------------------------------------------------------------------
+
+The MIT License above applies to the source code and to documentation written
+for this repository. It does not apply to, and does not sublicense, third-party
+data, articles, or databases that the application displays or that are stored
+beside the code.
+
+1. openFDA product-label text is provided by the U.S. Food and Drug
+   Administration under CC0 1.0. Do not rely on openFDA to make decisions
+   regarding medical care.
+
+2. NIH / NLM / RxNorm records are U.S. government public-domain data. NLM is
+   not responsible for this product and does not endorse it. The verbatim NLM
+   notice is shown in the application.
+
+3. Europe PMC open-access articles remain under the Creative Commons license
+   stated on each article (commonly CC BY 4.0 or CC BY-NC 4.0, not the public
+   domain and not the MIT License). Display of an abstract or extract requires
+   the creator names, the title, a link to that record's license, a link to the
+   source, and a note when the text has been shortened. A blanket footer is not
+   a substitute. The application renders those items on each literature card
+   when Europe PMC returns them.
+
+4. World Health Organization GLASS data, if a verbatim extract is ever added,
+   remains under CC BY-NC-SA 3.0 IGO. That license's NonCommercial and
+   ShareAlike terms are incompatible with the MIT License. Any such extract
+   must stay in a separate file, keep WHO's mandatory attribution and
+   non-endorsement notice, and must not be offered under MIT. The static
+   resistance percentages shipped in this repository are developer-compiled
+   educational illustrations. They are not a verbatim GLASS dataset, no
+   surveillance year is stored with them, and they must not be cited as
+   official WHO statistics. WHO does not endorse this project.
+
+5. ECDC EARS-Net material may be reproduced only with a citation of the
+   specific source report and year, and with a statement that adapted
+   aggregations are the developer's responsibility, not ECDC's. This repository
+   does not ship a verbatim EARS-Net table and does not store a report year.
+   The EU/EEA percentages are the same kind of educational illustration and
+   must not be cited as official EARS-Net rates. ECDC does not endorse this
+   project.
+
+6. Pathogen, syndrome, and drug-association indexes shipped with the
+   application are maintained here as an educational compilation for this
+   academic sandbox. The MIT License does not sublicense the Sanford Guide,
+   UpToDate, Amboss, or any other commercial database, and these indexes are
+   not offered as those works. A record that was taken from a protected
+   database is not covered by the MIT grant. Where a record stores a public
+   source URL, the application identifies that source. Individual facts are
+   not, by themselves, a claim of copyright in those facts.
+
+7. The MIT "AS IS" disclaimer is a software-license notice. It is not a waiver
+   of liability for bodily injury, harm to health, or gross negligence, and it
+   does not state that Directive (EU) 2024/2853 Article 2(2) displaces national
+   fault-based tort law. Article 2(2) concerns the Directive's no-fault product
+   liability for free and open-source software developed outside commercial
+   activity. Article 2(4) preserves national fault-based rules.

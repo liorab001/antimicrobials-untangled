@@ -35,7 +35,7 @@
 
     function showPiiBlock(msg) {
       const alertBox = document.getElementById("piiFirewallAlert");
-      alertBox.innerHTML = `<i class="fa-solid fa-shield-halved mr-1"></i> <strong>Zero-PII Firewall:</strong> ${msg}`;
+      alertBox.innerHTML = `<i class="fa-solid fa-shield-halved mr-1"></i> <strong>Search-box identifier block:</strong> ${msg}`;
       alertBox.classList.remove("hidden");
     }
 
@@ -753,11 +753,11 @@
         <div class="bg-white rounded-2xl border border-slate-200 p-8 shadow-sm space-y-6">
           <div class="space-y-2">
             <span class="text-[11px] font-bold uppercase tracking-wider text-blue-600 bg-blue-50 px-2.5 py-1 rounded border border-blue-200">
-              Clinical Decision Support Sandbox
+              Academic monograph sandbox
             </span>
             <h3 class="text-lg font-extrabold text-slate-900 pt-1">Explore by Pathogen, Syndrome, or Drug / Group</h3>
             <p class="text-xs text-slate-600 leading-relaxed">
-              Use the top search bar (including for rare or zoonotic organisms) or choose a high-frequency entry below to untangle FDA monographs, NIH therapeutic relationships, multi-syndrome filters, and renal dosing guardrails.
+              Use the top search bar or choose an index entry below to inspect FDA monograph text, NIH ingredient associations, and educational pathogen–syndrome indexes. Branch filters select label sentences. They do not calculate a dose, and a missing flag is not a safety finding.
             </p>
           </div>
 
@@ -1336,7 +1336,7 @@
         const isBlocked = evaluateDrugAllergyStatus(targetItem, allergyState).status === "BLOCKED";
         if (statusEl) {
           statusEl.textContent = isBlocked
-            ? `⚠️ Pinned "${targetItem.genericName}" to #1 below (CONTRAINDICATED BY SELECTED ALLERGY)`
+            ? `Pinned "${targetItem.genericName}" to #1 below (allergy-class filter match — not a contraindication ruling)`
             : `✓ Pinned "${targetItem.genericName}" data hub to #1 at top of list`;
         }
 
@@ -3650,8 +3650,8 @@
           evidence: [{ ...evidence, sourceType: "table_conditions", sourceText: text, tableNotes: [] }],
           labelProvenance: res.labelProvenance || {} });
       });
-      if (res.normalRenalAssumed) bullets.push({ color: "blue", tag: "Normal kidney function assumed", text: `CrCl not entered. eGFR ${Math.round(res.assumedFromEgfr)} mL/min/1.73 m² is within 90–130 and no dialysis is selected, so the standard label dose is shown. No numeric CrCl was inferred.` });
-      if (res.crclUsed) bullets.push({ color: "blue", tag: "Renal measurement used", text: `FDA label specifies CrCl; patient-entered CrCl used directly: ${Math.round(res.crclValue)} mL/min. No eGFR substitution was made.` });
+      if (res.normalRenalAssumed) bullets.push({ color: "blue", tag: "Unflagged Label Text", text: `Ordinary-function text branch selected. CrCl was left blank, eGFR ${Math.round(res.assumedFromEgfr)} mL/min/1.73 m² is within 90–130, and no dialysis is selected, so label sentences that are not limited to renal impairment are shown. No CrCl was calculated and no dose is recommended.` });
+      if (res.crclUsed) bullets.push({ color: "blue", tag: "Unflagged Label Text", text: `CrCl text filter applied to label sentences that state a CrCl threshold. Entered value: ${Math.round(res.crclValue)} mL/min. eGFR was not converted into CrCl, and this line is not a dose recommendation.` });
       if (res.durations.length === 1) bullets.push({ color: "emerald", tag: "Course Window", text: res.durations[0] });
       else if (res.durations.length > 1) bullets.push({ color: "emerald", tag: "Duration Options", text: res.durations.slice(0, 4).join("; ") });
       if (SHOW_REGIMEN_FILTER_SUMMARY) {
@@ -3746,28 +3746,28 @@
       const combined = `${rawDdi} ${rawBoxed}`.toLowerCase();
 
       if (combined.includes("monoamine oxidase") || combined.includes("serotonin") || combined.includes("maoi") || combined.includes("ssri")) {
-        bullets.push({ color: "red", tag: "High Risk: Serotonin / MAOI", text: "Reversible MAOI: Avoid SSRIs, SNRIs, TCAs, and adrenergics (Serotonin Syndrome / hypertensive crisis)." });
+        bullets.push({ color: "red", tag: "Parsed caution phrase", text: "Retrieved text matched a serotonin / MAOI phrase. Open the monograph. This parser flag is not an instruction to avoid a medicine." });
       }
       if (combined.includes("qtc") || combined.includes("qt interval") || combined.includes("torsades")) {
-        bullets.push({ color: "red", tag: "High Risk: QTc Prolongation", text: "Prolongs QTc interval: Avoid Class IA/III antiarrhythmics, Ondansetron, or additive QTc agents." });
+        bullets.push({ color: "red", tag: "Parsed caution phrase", text: "Retrieved text matched a QTc / QT-interval phrase. Open the monograph. This parser flag is not a safety or prescribing judgment." });
       }
       if (combined.includes("valproic") || combined.includes("valproate")) {
-        bullets.push({ color: "red", tag: "High Risk: Valproate Drop", text: "Depletes serum Valproic Acid concentrations by up to 80%, precipitating breakthrough seizures." });
+        bullets.push({ color: "red", tag: "Parsed caution phrase", text: "Retrieved text matched a valproate phrase. Open the monograph. This parser flag does not describe the size of any concentration change." });
       }
       if (combined.includes("cyp3a4") || combined.includes("simvastatin") || combined.includes("atorvastatin")) {
-        bullets.push({ color: "red", tag: "CYP3A4 Inhibition", text: "Inhibits CYP3A4: Elevates statins (rhabdomyolysis risk), DOACs, and calcineurin inhibitors." });
+        bullets.push({ color: "red", tag: "Parsed caution phrase", text: "Retrieved text matched a CYP3A4 or named-statin phrase. Open the monograph. This parser flag is not an interaction ruling." });
       }
       if (combined.includes("antacid") || combined.includes("magnesium") || combined.includes("calcium") || combined.includes("iron") || combined.includes("chelat")) {
-        bullets.push({ color: "amber", tag: "Cation Chelation (Ca²⁺/Mg²⁺/Fe²⁺)", text: "Oral absorption blocked by multivalent cations (Ca²⁺, Mg²⁺, Fe²⁺, Al³⁺) — space oral doses by ≥2 hours." });
+        bullets.push({ color: "amber", tag: "Parsed adjustment phrase", text: "Retrieved text matched a multivalent-cation or chelation phrase. Open the monograph rather than treating this flag as a dosing interval." });
       }
       if (combined.includes("warfarin") || combined.includes("inr") || combined.includes("prothrombin time")) {
-        bullets.push({ color: "amber", tag: "Warfarin / INR Shift", text: "Potentiates Vitamin K antagonists; monitor PT/INR closely." });
+        bullets.push({ color: "amber", tag: "Parsed adjustment phrase", text: "Retrieved text matched a warfarin / INR / prothrombin phrase. Open the monograph. This flag is not a monitoring order." });
       }
       if (combined.includes("nephrotoxic") || combined.includes("aminoglycoside") || combined.includes("furosemide")) {
-        bullets.push({ color: "amber", tag: "Additive Nephro/Ototoxicity", text: "Synergistic renal/vestibular toxicity with Aminoglycosides, Vancomycin, Loop Diuretics, or NSAIDs." });
+        bullets.push({ color: "amber", tag: "Parsed adjustment phrase", text: "Retrieved text matched a nephrotoxicity, aminoglycoside, or loop-diuretic phrase. Open the monograph. This flag is not a toxicity ruling." });
       }
       if (bullets.length === 0) {
-        bullets.push({ color: "emerald", tag: "Interaction Profile", text: extractCleanSentence(rawDdi, "interaction", 140) });
+        bullets.push({ color: "emerald", tag: "No Flag Detected in Parsed Text", text: extractCleanSentence(rawDdi, "interaction", 140) || "No interaction caution phrase was detected in the parsed excerpt. That is not a finding that the label is silent or that combined use is appropriate." });
       }
       return bullets.slice(0, 3);
     }
@@ -3784,7 +3784,7 @@
       } else if (profileSource === "legacy_matrix") {
         bullets.push({ color: "amber", tag: "Legacy app renal reference (not FDA-label-derived)", text: renalProfile.adjustedDose });
       } else if (renalProfile?.contraLevel?.includes("SAFE")) {
-        bullets.push({ color: "emerald", tag: "FDA renal-label text", text: renalProfile.adjustedDose });
+        bullets.push({ color: "emerald", tag: "No Flag Detected in Parsed Text", text: renalProfile.adjustedDose });
       } else {
         bullets.push({ color: "blue", tag: "Renal label review", text: extractCleanSentence(rawPop, "renal", 240) || "No specific renal adjustment was identified in the retrieved label excerpt." });
       }
@@ -3850,39 +3850,39 @@
       const isLincosamide = text.includes("lincosamide") || /(clindamycin|lincomycin)/.test(text);
 
       if (isPenicillin && allergyState.pcn !== "none") {
-        return { status: "BLOCKED", specificAllergy: "Penicillin / Beta-Lactam Allergy", reason: "Penicillin-class Beta-Lactam — Contraindicated by selected Penicillin Allergy" };
+        return { status: "BLOCKED", specificAllergy: "Penicillin-class filter", reason: "Penicillin-class text matched the selected class filter" };
       }
       if (isCephalosporin && allergyState.cephalosporin) {
-        return { status: "BLOCKED", specificAllergy: "Cephalosporin Allergy", reason: "Cephalosporin class — Contraindicated by selected Cephalosporin Allergy" };
+        return { status: "BLOCKED", specificAllergy: "Cephalosporin-class filter", reason: "Cephalosporin-class text matched the selected class filter" };
       }
       if ((isCephalosporin || isCarbapenem) && allergyState.pcn === "severe") {
-        return { status: "BLOCKED", specificAllergy: "Severe IgE / SJS Beta-Lactam Allergy", reason: "Beta-Lactam class — Contraindicated by selected Severe IgE/SJS Beta-Lactam Allergy" };
+        return { status: "BLOCKED", specificAllergy: "Severe-reaction beta-lactam filter", reason: "Beta-lactam text matched the selected severe-reaction class filter" };
       }
       if ((isCephalosporin || isCarbapenem) && allergyState.pcn === "mild") {
-        return { status: "CAUTION", specificAllergy: "Mild Penicillin Rash", reason: "Mild PCN Allergy: Low Cross-Reactivity (<1–2%)" };
+        return { status: "CAUTION", specificAllergy: "Mild penicillin-rash class filter", reason: "Mild-rash class filter selected. Cephalosporin and carbapenem text is flagged for review. This filter does not estimate cross-reactivity." };
       }
       if (isMacrolide && allergyState.macrolide) {
-        return { status: "BLOCKED", specificAllergy: "Macrolide Allergy", reason: "Macrolide class — Contraindicated by selected Macrolide Allergy" };
+        return { status: "BLOCKED", specificAllergy: "Macrolide-class filter", reason: "Macrolide-class text matched the selected class filter" };
       }
       if (isQuinolone && allergyState.quinolone) {
-        return { status: "BLOCKED", specificAllergy: "Fluoroquinolone Allergy", reason: "Fluoroquinolone class — Contraindicated by selected Fluoroquinolone Allergy" };
+        return { status: "BLOCKED", specificAllergy: "Fluoroquinolone-class filter", reason: "Fluoroquinolone-class text matched the selected class filter" };
       }
       if (isTetracycline && allergyState.tetracycline) {
-        return { status: "BLOCKED", specificAllergy: "Tetracycline Allergy", reason: "Tetracycline class — Contraindicated by selected Tetracycline Allergy" };
+        return { status: "BLOCKED", specificAllergy: "Tetracycline-class filter", reason: "Tetracycline-class text matched the selected class filter" };
       }
       if (isSulfa && allergyState.sulfa) {
-        return { status: "BLOCKED", specificAllergy: "Sulfonamide Allergy", reason: "Sulfonamide class — Contraindicated by selected Sulfonamide Allergy" };
+        return { status: "BLOCKED", specificAllergy: "Sulfonamide-class filter", reason: "Sulfonamide-class text matched the selected class filter" };
       }
       if (isAminoglycoside && allergyState.aminoglycoside) {
-        return { status: "BLOCKED", specificAllergy: "Aminoglycoside Allergy", reason: "Aminoglycoside class — Contraindicated by selected Aminoglycoside Allergy" };
+        return { status: "BLOCKED", specificAllergy: "Aminoglycoside-class filter", reason: "Aminoglycoside-class text matched the selected class filter" };
       }
       if (isGlycopeptide && allergyState.glycopeptide) {
-        return { status: "BLOCKED", specificAllergy: "Glycopeptide Allergy", reason: "Glycopeptide class — Contraindicated by selected Glycopeptide Allergy" };
+        return { status: "BLOCKED", specificAllergy: "Glycopeptide-class filter", reason: "Glycopeptide-class text matched the selected class filter" };
       }
       if (isLincosamide && allergyState.lincosamide) {
-        return { status: "BLOCKED", specificAllergy: "Lincosamide Allergy", reason: "Lincosamide class — Contraindicated by selected Lincosamide Allergy" };
+        return { status: "BLOCKED", specificAllergy: "Lincosamide-class filter", reason: "Lincosamide-class text matched the selected class filter" };
       }
-      return { status: "SAFE", specificAllergy: null, reason: "Allergy Safe" };
+      return { status: "SAFE", specificAllergy: null, reason: "No allergy-class flag on this filter" };
     }
 
     function getAllergyState() {
@@ -3985,12 +3985,12 @@
       });
 
       const eligibleCount = visibleMainCards.filter(d => d.evalResult.status !== "BLOCKED").length;
-      document.getElementById("drugCountBadge").textContent = `${eligibleCount} Safe / ${blockedDrawerDrugs.length} Allergy-Contraindicated`;
+      document.getElementById("drugCountBadge").textContent = `${eligibleCount} unflagged by allergy filter / ${blockedDrawerDrugs.length} matched allergy-class filter`;
 
       if (visibleMainCards.length === 0) {
         safeContainer.innerHTML = renderGuidelineChoices([], allergyState.renalFlag) + (diseaseFilteredDrugs.length === 0
           ? `<div class="bg-white p-8 rounded-xl border border-slate-200 text-center text-xs text-slate-500">No agents matched the current pathogen / presentation filter. Try another presentation, or select a drug in the NIH bar above.</div>`
-          : `<div class="bg-white p-8 rounded-xl border border-slate-200 text-center text-xs text-slate-500">All matching agents are contraindicated by your active allergy filters. Select any drug in the NIH bar above or in the Contraindicated list below to pin its data hub to the top of this list.</div>`);
+          : `<div class="bg-white p-8 rounded-xl border border-slate-200 text-center text-xs text-slate-500">Every matching record hit the selected allergy-class text filter. That is a class-name match, not a clinical contraindication ruling. Select a drug in the NIH bar or in the matched list below to pin its record.</div>`);
       } else {
         safeContainer.innerHTML = renderWithCombos(visibleMainCards, allergyState.renalFlag);
       }
@@ -4005,7 +4005,7 @@
             </div>
             <div class="flex items-center gap-2">
               <span class="bg-rose-600 text-white font-bold px-2.5 py-0.5 rounded-full text-[10px]">
-                <i class="fa-solid fa-ban mr-1"></i>${d.evalResult.specificAllergy}
+                <i class="fa-solid fa-ban mr-1"></i>Filter match: ${d.evalResult.specificAllergy}
               </span>
               <span class="text-[11px] font-bold text-rose-800 hover:underline">
                 Pin Data Hub to #1 ↑
@@ -4198,6 +4198,13 @@
         : btnEl.dataset.closedLabel;
     }
 
+    function renalFlagLabel(level) {
+      const text = String(level || "");
+      if (/SAFE/i.test(text)) return "No renal caution flag in app screen";
+      if (/CONTRAINDICATION|CONTRAINDICAT|NEUROTOX|NEPHROTOX/i.test(text)) return "Renal caution phrase in app screen";
+      return text;
+    }
+
     function renderDistilledDrugCard(drug, isRenalActive) {
       const isAllergyBlocked = drug.evalResult.status === "BLOCKED";
       const isCaution = drug.evalResult.status === "CAUTION";
@@ -4212,9 +4219,9 @@
         && !(renalView.adjusted && /^(?:FDA renal-label text|Renal label review)/i.test(b.tag || "")));
       const visibleSelfReg1 = null; // Declarative interpreter supplies resolution notices.
 
-      let statusBadge = `<span class="bg-emerald-100 text-emerald-800 border border-emerald-200 text-[10px] font-bold px-2.5 py-0.5 rounded-full"><i class="fa-solid fa-check mr-1"></i>Allergy Safe</span>`;
+      let statusBadge = `<span class="bg-emerald-100 text-emerald-800 border border-emerald-200 text-[10px] font-bold px-2.5 py-0.5 rounded-full"><i class="fa-solid fa-check mr-1"></i>No allergy-class flag on this filter</span>`;
       if (isAllergyBlocked) {
-        statusBadge = `<span class="bg-rose-600 text-white border border-rose-800 text-[10px] font-extrabold px-3 py-1 rounded-full animate-pulse"><i class="fa-solid fa-ban mr-1"></i>CONTRAINDICATED: ${drug.evalResult.specificAllergy}</span>`;
+        statusBadge = `<span class="bg-rose-600 text-white border border-rose-800 text-[10px] font-extrabold px-3 py-1 rounded-full"><i class="fa-solid fa-ban mr-1"></i>Allergy-class filter match: ${drug.evalResult.specificAllergy}</span>`;
       } else if (isCaution) {
         statusBadge = `<span class="bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-bold px-2.5 py-0.5 rounded-full">${drug.evalResult.reason}</span>`;
       }
@@ -4263,13 +4270,13 @@
                 </div>
                 <div>
                   <span class="text-[10px] font-extrabold uppercase tracking-widest text-amber-300 block">
-                    Explicit Drug Selection Override — Active Allergy Alert
+                    Selected record matches the allergy-class text filter
                   </span>
                   <h4 class="text-sm font-extrabold text-white mt-0.5">
-                    CONTRAINDICATED BY PATIENT ALLERGY: ${drug.evalResult.specificAllergy.toUpperCase()}
+                    Allergy-class filter match: ${esc(drug.evalResult.specificAllergy)}
                   </h4>
                   <p class="text-xs text-rose-100 mt-0.5">
-                    <strong>${esc(drug.genericName)}</strong> belongs to the <strong>${esc(drug.epcClasses[0] || "contraindicated")}</strong> class. Displayed at the top of the list because it is currently selected.
+                    <strong>${esc(drug.genericName)}</strong> matched the <strong>${esc(drug.epcClasses[0] || "selected")}</strong> class filter. It is pinned because it was selected. This is not a clinical contraindication ruling.
                   </p>
                 </div>
               </div>
@@ -4289,7 +4296,7 @@
               ${syndromeCoverageHtml}
             </div>
             <div class="flex items-center gap-1.5 self-start flex-wrap">
-              ${isRenalActive ? `<span class="text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full ${isRenalContra ? 'bg-rose-600 text-white animate-pulse' : 'bg-fuchsia-700 text-white'}"><i class="fa-solid fa-kidneys mr-1"></i>${renalView.adjusted && !isRenalContra ? "RENAL DOSE ADJUSTED" : esc(rp.contraLevel)}</span>` : ''}
+              ${isRenalActive ? `<span class="text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full ${isRenalContra ? 'bg-rose-600 text-white' : 'bg-fuchsia-700 text-white'}"><i class="fa-solid fa-kidneys mr-1"></i>${renalView.adjusted && !isRenalContra ? "Renal text branch selected" : esc(renalFlagLabel(rp.contraLevel))}</span>` : ''}
               ${statusBadge}
             </div>
           </div>
@@ -4330,7 +4337,7 @@
               <div class="space-y-2">
                 <div class="flex items-center justify-between gap-2">
                   <span class="text-[10px] font-bold uppercase tracking-wider text-purple-900 flex items-center gap-1.5">
-                    <i class="fa-solid fa-pills text-purple-600"></i> 2. Drug Interactions &amp; Risk Summary
+                    <i class="fa-solid fa-pills text-purple-600"></i> 2. Drug-interaction phrases in parsed text
                   </span>
                   <button type="button" title="Inspect interaction source and attribution" aria-label="Inspect interaction source and attribution" onclick="openMonographModal('${jsArg(drug.id)}', 'ddi', 'Complete drug interactions and cautions source')" class="text-purple-700 hover:text-purple-950 p-1 rounded hover:bg-purple-100">
                     <i class="fa-solid fa-book-open text-[13px]"></i>
@@ -4391,7 +4398,7 @@
     }
     function updatePtNote() {
       const g = ptAge < 0.08 ? "Neonate (≤28 d)" : ptAge < 1 ? "Infant" : ptAge < 12 ? "Child" : ptAge < 18 ? "Adolescent" : "Adult";
-      $id("ptNote").textContent = `${g} • ${ptKg.toFixed(1)} kg / ${(ptKg * 2.20462).toFixed(1)} lb`;
+      $id("ptNote").textContent = `Text-filter band: ${g} • ${ptKg.toFixed(1)} kg / ${(ptKg * 2.20462).toFixed(1)} lb`;
       $id("neonatalContextGroup")?.classList.toggle("hidden", ptAge >= 0.25);
     }
     function syncPt(k, v) {
@@ -4424,11 +4431,11 @@
         const clean = isExcerpt
           ? String(t).replace(/^FDA (pediatric|pregnancy) text:/, "Product-label $1 excerpt:")
           : String(t).replace(/\bFDA(?:[- ]class)?(?: (?:labeling|label|warning))?\b/gi, "app reference");
-        f.push({ l, t: `${isExcerpt ? "" : "<span class=\"font-semibold\">Legacy app reference:</span> "}${clean}`, src: cur, evidenceSource: isExcerpt ? "retrieved_label" : "legacy_app" });
+        f.push({ l, t: `${isExcerpt ? "" : "<span class=\"font-semibold\">Legacy app reference, not a prescribing instruction:</span> "}${clean}`, src: cur, evidenceSource: isExcerpt ? "retrieved_label" : "legacy_app" });
       };
       const P = $id("ptPreg").checked, H = ($id("ptHepClass")?.value || "none") !== "none";
 
-      if (A < 18 && /floxacin/.test(n)) add("amber", "Age <18: fluoroquinolones are reserved for infections without a safe alternative (FDA class labeling: tendon/musculoskeletal toxicity).");
+      if (A < 18 && /floxacin/.test(n)) add("amber", "Age <18 text filter: legacy note of a fluoroquinolone age limit in class labeling (tendon/musculoskeletal toxicity). Open the monograph.");
       if (A < 8 && /(doxycycline|minocycline|tetracycline)/.test(n)) add("red", "Age <8: tetracyclines cause permanent tooth discoloration — avoid unless benefit outweighs risk (FDA labeling).");
       if (A < 18 && /tigecycline/.test(n)) add("red", "Age <18: safety/efficacy not established; boxed all-cause mortality warning (FDA label).");
       if (A < 0.08 && /ceftriaxone/.test(n)) add("red", "Neonate: contraindicated in hyperbilirubinemic/premature neonates and in neonates ≤28 d receiving calcium-containing IV fluids (FDA label).");
@@ -4512,7 +4519,7 @@
         const r = e.rates?.[reg];
         if (!Number.isFinite(r) || r < 0 || r > 100) return;
         const hi = r >= (settings.highThreshold ?? 25), mid = r >= (settings.mediumThreshold ?? 10);
-        out.push({ l: hi ? "red" : mid ? "amber" : "emerald", t: `<b>${esc(p.pathogen)}</b> vs ${esc(e.antibiotic)}: <b>${r}%</b> resistant (${esc(regName)} reference benchmark). ${hi ? "Susceptibility testing REQUIRED — avoid empiric monotherapy." : mid ? "Susceptibility testing recommended before relying on this agent." : "Low resistance — confirm against local antibiogram."}` });
+        out.push({ l: hi ? "red" : mid ? "amber" : "emerald", t: `<b>${esc(p.pathogen)}</b> vs ${esc(e.antibiotic)}: <b>${r}%</b> is an illustrative repository figure (${esc(regName)}), not an official WHO, ECDC, or CDC rate. ${hi ? "The figure is at or above this page's high threshold. That is not an instruction to avoid a drug." : mid ? "The figure is between this page's thresholds. It is not a susceptibility recommendation." : "No flag is implied by a lower illustrative figure. It is not a finding that the organism is susceptible."}` });
       }));
       return out;
     }
@@ -4686,10 +4693,10 @@
         ? `${metric === "crcl" ? "CrCl" : "eGFR"} input selected: ${Math.round(value)} ${metric === "crcl" ? "mL/min" : "mL/min/1.73 m²"}.`
         : `${metric === "crcl" ? "CrCl" : "eGFR"} input selected; no value entered.`;
       if (metric === "egfr" && Number.isFinite(p.crcl)) status += ` Entered CrCl ${Math.round(p.crcl)} mL/min remains available for CrCl-specific branches.`;
-      if (derived) status += ` Estimated CrCl ${derived.value.toFixed(2)} ${derived.unit} (${derived.label}) selects CrCl-specific label branches.`;
+      if (derived) status += ` Equation result ${derived.value.toFixed(2)} ${derived.unit} (${derived.label}) selects CrCl-labelled sentences only. It is not a dose, and eGFR was not converted into CrCl.`;
       else if (AMUApp.isRenalCalculationActive?.() && !Number.isFinite(p.crcl)) status += " Complete the CrCl calculator or enter CrCl separately.";
-      else if (canAssumeNormalRenalFunction(p)) status += ` No CrCl entered: standard kidney function assumed from normal eGFR (${Math.round(p.egfr)}); no numeric CrCl inferred.`;
-      else if (!Number.isFinite(p.crcl)) status += " CrCl-specific dosing requires a separately entered CrCl; this eGFR does not establish CrCl.";
+      else if (canAssumeNormalRenalFunction(p)) status += ` No CrCl entered. eGFR ${Math.round(p.egfr)} is within 90–130 and dialysis is off, so the ordinary-function text branch is selected. No CrCl was calculated and no dose is recommended.`;
+      else if (!Number.isFinite(p.crcl)) status += " CrCl-specific label sentences need a separately entered CrCl. This eGFR value does not stand in for CrCl.";
       if (p.dialysis !== "none") status += ` Dialysis mode: ${p.dialysis.toUpperCase()}; no normal-function assumption.`;
       $id("renalMetricStatus").textContent = status;
     }
@@ -4702,9 +4709,9 @@
       $id("renalFlag").checked=m==="hd"||(m==="none"&&severe);
       if (Number.isFinite(egfr)) {
         const e = egfr;
-        const s = e > 130 ? "ARC (>130): augmented renal clearance" : e >= 90 ? "G1 (≥90): normal" : e >= 60 ? "G2 (60–89): mildly decreased" : e >= 45 ? "G3a (45–59): mild–moderate" : e >= 30 ? "G3b (30–44): moderate–severe" : e >= 15 ? "G4 (15–29): severe" : "G5 (<15): kidney failure";
+        const s = e > 130 ? "Text-filter band: eGFR >130" : e >= 90 ? "Text-filter band: eGFR ≥90" : e >= 60 ? "Text-filter band: eGFR 60–89" : e >= 45 ? "Text-filter band: eGFR 45–59" : e >= 30 ? "Text-filter band: eGFR 30–44" : e >= 15 ? "Text-filter band: eGFR 15–29" : "Text-filter band: eGFR <15";
         $id("egfrStage").textContent = s;
-      } else $id("egfrStage").textContent = "No eGFR entered; normal kidney function cannot be assumed.";
+      } else $id("egfrStage").textContent = "No eGFR entered. The ordinary-function text branch is not selected.";
       if (Number.isFinite(crcl)) {
         const c = crcl;
         $id("crclStage").textContent = c >= 90 ? "CrCl ≥90 mL/min" : c >= 60 ? "CrCl 60–89 mL/min" : c >= 30 ? "CrCl 30–59 mL/min" : c >= 15 ? "CrCl 15–29 mL/min" : "CrCl <15 mL/min";
@@ -4758,7 +4765,7 @@
         <div class="bg-white ${red ? "text-rose-700" : "text-amber-700"} p-2 rounded-lg shrink-0 mt-0.5"><i class="fa-solid ${red ? "fa-skull-crossbones" : preg ? "fa-person-pregnant" : "fa-triangle-exclamation"} text-lg"></i></div>
         <div>
           <span class="text-[10px] font-extrabold uppercase tracking-widest text-amber-300 block">Active ${preg ? "Pregnancy" : "Hepatic Impairment"} Alert</span>
-          <h4 class="text-sm font-extrabold text-white mt-0.5">${red ? "CONTRAINDICATED" : "DOSE ADJUSTMENT / CAUTION"} — ${preg ? "PREGNANCY" : "HEPATIC IMPAIRMENT (CHILD-PUGH B/C)"}</h4>
+          <h4 class="text-sm font-extrabold text-white mt-0.5">${red ? "Legacy reference flag" : "Legacy reference note"} — ${preg ? "pregnancy text" : "hepatic text"}</h4>
           <p class="text-xs ${red ? "text-rose-100" : "text-amber-50"} mt-0.5">${x.t}</p>
         </div></div>`;
     }
@@ -4798,7 +4805,7 @@
         if (x.l === "blue" || x.l === "emerald") return;
         const label = x.src === "preg" ? "Pregnancy" : x.src === "hep" ? "Hepatic" : x.src === "renal" ? "Kidney band" : x.src === "wt" ? "Body weight" : "Age";
         const r = (x.src === "renal" || x.src === "wt") ? (x.l === "red" ? 2 : 0.5) : (x.l === "red" ? 2 : 1);
-        if (r >= 1) why.push(label + (r >= 2 ? ": contraindicated/avoid" : ": relative caution"));
+        if (r >= 1) why.push(label + (r >= 2 ? ": legacy reference flag" : ": legacy reference note"));
         s = Math.max(s, r);
       });
       if (d.evalResult && d.evalResult.status === "CAUTION") s = Math.max(s, 0.5);
@@ -4821,13 +4828,13 @@
       const top = [...pinned, ...(clean.length ? clean : rel)];
       const mini = clean.length ? [...rel, ...abs] : abs;
       let html = renderTopCards(top.map(x => x.d), renal);
-      if (!clean.length && rel.length) html = `<div class="p-3 rounded-xl bg-amber-50 border border-amber-300 text-xs text-amber-950 font-semibold"><i class="fa-solid fa-triangle-exclamation mr-1"></i>No option without a contraindication for this profile — the least-restricted alternatives (relative contraindications) are listed first.</div>` + html;
-      if (mini.length) html += `<div class="pt-3 mt-2 border-t border-slate-300 space-y-2"><h3 class="text-xs font-bold uppercase tracking-wider text-rose-700"><i class="fa-solid fa-ban mr-1"></i>Contraindicated for this profile — minimized (relative first, then absolute; click a row to expand)</h3>${mini.map(x => minimizedRow(x.d, renal, x.a)).join("")}</div>`;
+      if (!clean.length && rel.length) html = `<div class="p-3 rounded-xl bg-amber-50 border border-amber-300 text-xs text-amber-950 font-semibold"><i class="fa-solid fa-triangle-exclamation mr-1"></i>Every retrieved card has a text-filter flag for these branch parameters. Cards with fewer flags are listed first. A flag is a text match, not a determination that a drug is contraindicated.</div>` + html;
+      if (mini.length) html += `<div class="pt-3 mt-2 border-t border-slate-300 space-y-2"><h3 class="text-xs font-bold uppercase tracking-wider text-rose-700"><i class="fa-solid fa-ban mr-1"></i>Filter-flagged for these branch parameters — minimized (click a row to expand)</h3>${mini.map(x => minimizedRow(x.d, renal, x.a)).join("")}</div>`;
       const activeKey = currentSearchLevel === "PATHOGEN" && activePathogenProfile ? `${activePathogenProfile.canonical}|${activeDiseaseFilterId}` : "";
       if (activeKey && activeGuidelineRecord()) {
-        html = `<div class="mb-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] text-emerald-950">Green frames identify guideline first-line choices for the named infection and stated conditions. Patient restrictions still apply. Each dose panel identifies its own source; treatment preference does not establish a matching label dose.</div>` + html;
+        html = `<div class="mb-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] text-emerald-950">Green frames mark agents named in the cited public source for this indexed presentation. The frame is a source index, not a prescribing order. Branch-filter flags still apply. Each dose panel identifies its own source, and a source index does not establish a matching label dose.</div>` + html;
       } else if (activeKey && !FIRST_LINE_COMBOS[activeKey] && activeKey !== "Streptococcus pyogenes|pharyngitis") {
-        html = `<div class="mb-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[10px] text-slate-600">Agent cards are filtered by the selected pathogen/presentation and patient contraindications. Card order is not a first-line ranking; an FDA-label dose match does not by itself establish comparative treatment preference.</div>` + html;
+        html = `<div class="mb-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[10px] text-slate-600">Cards follow the selected pathogen or presentation index and the branch-parameter flags. Card order is not a treatment ranking. A label-text match does not establish comparative preference.</div>` + html;
       }
       return html;
     }

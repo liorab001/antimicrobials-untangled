@@ -1,4 +1,4 @@
-/* AMU Engine 1.1.0 — one-file interpreter for amu-database.json.
+/* AMU Engine 1.1.1 — one-file interpreter for amu-database.json.
  * Browser: const engine = await AMUEngine.load('./amu-database.json');
  * Node: const { AMUEngine } = require('./amu-engine.js');
  * await engine.analyze({ label, patient, clinicalContext });
@@ -10,7 +10,7 @@
 function engineFactory(isolated) {
 'use strict';
 isolated = isolated === true;
-const VERSION='1.1.0', PROTOCOL='amu-declarative-label-rules/1';
+const VERSION='1.1.1', PROTOCOL='amu-declarative-label-rules/1';
 const OPERATIONS=new Set(['select','bind_roles','inherit_scope','tokenize','group','join','filter','require','project','attach_evidence','emit','annotate','exclude']);
 const EXPRESSIONS=new Set(['all','any','not','eq','ne','gt','gte','lt','lte','exists','matches','in','contains','count','add','subtract','multiply','divide','minimum','maximum','coalesce','if','range_contains','quantity_compare']);
 const FORBIDDEN=new Set(['__proto__','prototype','constructor']);
@@ -20,14 +20,18 @@ const arr=x=>Array.isArray(x)?x:[];
 const clone=x=>x===undefined?undefined:JSON.parse(JSON.stringify(x));
 const unique=a=>{const out=[],seen=new Set();for(const x of a){const k=JSON.stringify(x);if(!seen.has(k)){seen.add(k);out.push(x)}}return out};
 const clean=x=>String(x==null?'':x).trim();
-const canonical=x=>clean(x).toLowerCase().normalize('NFKC').replace(/[^\p{L}\p{N}]+/gu,' ').trim();
+const canonicalRaw=s=>s.toLowerCase().normalize('NFKC').replace(/[^\p{L}\p{N}]+/gu,' ').trim();
+const canonicalMemo=new Map();
+const canonical=x=>{const s=clean(x);if(s.length>256)return canonicalRaw(s);let v=canonicalMemo.get(s);if(v===undefined){v=canonicalRaw(s);if(canonicalMemo.size>=20000)canonicalMemo.clear();canonicalMemo.set(s,v);}return v;};
 const now=()=>typeof performance!=='undefined'?performance.now():Date.now();
 class EngineError extends Error { constructor(code,message,details={}){super(message);this.name='AMUEngineError';this.code=code;this.details=details;} }
 function fail(code,message,details){throw new EngineError(code,message,details)}
 function get(o,p){if(typeof p!=='string')return undefined;let v=o;for(const k of p.split('.')){if(FORBIDDEN.has(k)||!own(v,k))return undefined;v=v[k]}return v}
-function merge(a,b){const out=obj(a)?clone(a):{};if(!obj(b))return clone(b);for(const[k,v]of Object.entries(b)){if(FORBIDDEN.has(k))fail('UNSAFE_KEY','Prototype keys are not permitted');out[k]=obj(v)&&obj(out[k])?merge(out[k],v):clone(v)}return out}
+function mergeInto(out,b){for(const[k,v]of Object.entries(b)){if(FORBIDDEN.has(k))fail('UNSAFE_KEY','Prototype keys are not permitted');if(obj(v)&&obj(out[k]))mergeInto(out[k],v);else out[k]=clone(v)}}
+function mergeShared(a,b){if(!obj(b)||!obj(a))return b;const out={...a};for(const[k,v]of Object.entries(b)){if(FORBIDDEN.has(k))fail('UNSAFE_KEY','Prototype keys are not permitted');out[k]=obj(v)&&obj(a[k])?mergeShared(a[k],v):v}return out}
+function merge(a,b){if(!obj(b))return clone(b);const out=obj(a)?clone(a):{};mergeInto(out,b);return out}
 function freeze(x){if(x&&typeof x==='object'&&!Object.isFrozen(x)){Object.freeze(x);for(const v of Object.values(x))freeze(v)}return x}
-function parameterize(x,params,depth=0){if(depth>64)fail('PARAMETER_DEPTH','Parameter nesting exceeds limit');if(Array.isArray(x))return x.map(v=>parameterize(v,params,depth+1));if(!obj(x))return x;if(Object.keys(x).length===1&&own(x,'parameter')){if(!own(params,x.parameter))fail('MISSING_PARAMETER','Missing pipeline parameter',{parameter:x.parameter});return clone(params[x.parameter])}const out={};for(const[k,v]of Object.entries(x))out[k]=parameterize(v,params,depth+1);return out}
+function parameterize(x,params,depth=0,share=false){if(depth>64)fail('PARAMETER_DEPTH','Parameter nesting exceeds limit');if(Array.isArray(x))return x.map(v=>parameterize(v,params,depth+1,share));if(!obj(x))return x;if(Object.keys(x).length===1&&own(x,'parameter')){if(!own(params,x.parameter))fail('MISSING_PARAMETER','Missing pipeline parameter',{parameter:x.parameter});return share?params[x.parameter]:clone(params[x.parameter])}const out={};for(const[k,v]of Object.entries(x))out[k]=parameterize(v,params,depth+1,share);return out}
 function walk(x,fn,depth=0){if(depth>96)fail('BUNDLE_DEPTH','Database nesting exceeds limit');fn(x);if(x&&typeof x==='object')for(const[k,v]of Object.entries(x)){if(FORBIDDEN.has(k))fail('UNSAFE_KEY','Prototype keys are not permitted');walk(v,fn,depth+1)}}
 function versionParts(v){return String(v).split('.').map(x=>Number(x)||0)}
 function versionAtLeast(a,b){const x=versionParts(a),y=versionParts(b);for(let i=0;i<3;i++){if(x[i]>y[i])return true;if(x[i]<y[i])return false}return true}
@@ -59,12 +63,12 @@ function validateBundle(input){
   for(const binding of Object.values(f.bindings||{})){if(binding.roleRef&&!own(db.roleRules,binding.roleRef))fail('UNKNOWN_ROLE','Unknown role binding');if(binding.grammarRef&&!own(db.tokenGrammars,binding.grammarRef))fail('UNKNOWN_GRAMMAR','Unknown token grammar');}
   const pipelineKey=JSON.stringify([f.mode,f.processing.pipelineRef,f.processing.parameters||{}]);if(validatedPipelines.has(pipelineKey))continue;
   validatedPipelines.add(pipelineKey);
-  const params=merge(db.defaults?.processingParameters?.[f.mode]||{},f.processing.parameters||{}), seen=new Set(['label.nodes']);
+  const params=mergeShared(db.defaults?.processingParameters?.[f.mode]||{},f.processing.parameters||{}), seen=new Set(['label.nodes']);
   const pipeline=db.pipelines[f.processing.pipelineRef];if(!Array.isArray(pipeline.stages)||pipeline.stages.length>(db.contract.expansion?.limits?.maximumStagesPerPipeline||64))fail('INVALID_PIPELINE','Invalid pipeline stages');
   for(const s of pipeline.stages){
    if(!OPERATIONS.has(s.operation)||!own(db.operationContract,s.operation))fail('UNKNOWN_OPERATION','Unknown pipeline operation',{operation:s.operation});
    if(!seen.has(s.input)||seen.has(s.output)||typeof s.output!=='string')fail('PIPELINE_DEPENDENCY','Pipeline has invalid ordering or reused output',{stage:s.id});
-   const a=parameterize(s.arguments||{},params);
+   const a=parameterize(s.arguments||{},params,0,true);
    for(const k of arr(db.operationContract[s.operation].requiredArguments))if(!own(a,k))fail('MISSING_ARGUMENT','Missing operation argument',{stage:s.id,key:k});
    if(a.roleRulesRef&&!obj(get(db,a.roleRulesRef)))fail('UNKNOWN_REFERENCE','Role rules reference not found');
    for(const g of arr(a.grammarRefs))if(!own(db.tokenGrammars,g))fail('UNKNOWN_GRAMMAR','Pipeline grammar not found',{grammar:g});
@@ -96,7 +100,7 @@ function schemaErrors(value,schema,root=schema,depth=0,p='$',runtime=null){
 const compiledDatabases=new WeakMap();
 function compiledDatabase(db){
  if(compiledDatabases.has(db))return compiledDatabases.get(db);
- const compiled={regex:new Map(),stages:new Map(),dispatch:new Map(),unrestricted:[],entries:[]},expandedPipelines=new Map();
+ const compiled={regex:new Map(),byIdentity:new WeakMap(),stages:null,dispatch:new Map(),unrestricted:[],entries:[]},expandedPipelines=new Map();
  const kinds=expression=>{
   if(obj(expression)&&own(expression,'forEach'))return null;
   if(expression?.op==='eq')for(const [a,b]of [[expression.left,expression.right],[expression.right,expression.left]])if(a?.path==='scope.kind'&&typeof b==='string')return new Set([b]);
@@ -106,10 +110,11 @@ function compiledDatabase(db){
  };
  const labelOnly=expression=>{let valid=true,found=false;walk(expression,item=>{if(obj(item)&&['forEach','keyFrom','metricFrom','unitFrom'].some(key=>own(item,key)))valid=false;if(obj(item)&&typeof item.path==='string'){found=true;if(!item.path.startsWith('label.identity.'))valid=false;}});return valid&&found;};
  const guards=expression=>obj(expression)&&own(expression,'forEach')?[]:expression?.op==='all'?arr(expression.args).flatMap(guards):labelOnly(expression)?[expression]:[];
+ // Stages are expanded on first use: only formats that actually run need their parameters bound,
+ // and every pipeline/parameter reference was already validated by validateBundle.
+ const stageCache=new Map();
+ compiled.stages={get(format){let stages=stageCache.get(format);if(stages)return stages;const pipelineKey=JSON.stringify([format.mode,format.processing.pipelineRef,format.processing.parameters||{}]);if(!expandedPipelines.has(pipelineKey)){const params=merge(db.defaults?.processingParameters?.[format.mode]||{},format.processing.parameters||{});expandedPipelines.set(pipelineKey,db.pipelines[format.processing.pipelineRef].stages.map(stage=>({...stage,arguments:parameterize(stage.arguments,params)})));}stages=expandedPipelines.get(pipelineKey);stageCache.set(format,stages);return stages;}};
  for(const format of db.formats){
-  const pipelineKey=JSON.stringify([format.mode,format.processing.pipelineRef,format.processing.parameters||{}]);
-  if(!expandedPipelines.has(pipelineKey)){const params=merge(db.defaults?.processingParameters?.[format.mode]||{},format.processing.parameters||{});expandedPipelines.set(pipelineKey,db.pipelines[format.processing.pipelineRef].stages.map(stage=>({...stage,arguments:parameterize(stage.arguments,params)})));}
-  compiled.stages.set(format,expandedPipelines.get(pipelineKey));
   if(!format.enabled)continue;
   const allowed=kinds(format.recognition),entry={format,order:compiled.entries.length,guards:guards(format.recognition),kinds:allowed};compiled.entries.push(entry);
   if(!allowed)compiled.unrestricted.push(entry);else for(const kind of allowed){if(!compiled.dispatch.has(kind))compiled.dispatch.set(kind,[]);compiled.dispatch.get(kind).push(entry);}
@@ -118,10 +123,26 @@ function compiledDatabase(db){
 }
 function regexRuntime(db){
  if(!isolated)fail('ISOLATION_REQUIRED','Database regex evaluation requires an isolated worker');
- const cache=compiledDatabase(db).regex;let started=now(),budget=Math.min(10000,Math.max(1,db.contract.expansion?.regexExecution?.maximumEvaluationMilliseconds||100));
+ const compiled=compiledDatabase(db),cache=compiled.regex,byIdentity=compiled.byIdentity;let started=now(),budget=Math.min(10000,Math.max(1,db.contract.expansion?.regexExecution?.maximumEvaluationMilliseconds||100));let ticks=0;
  const checkDeadline=()=>{if(now()-started>budget)fail('REGEX_DEADLINE','Database processing exceeded its deadline');};
- const compile=p=>{checkDeadline();const key=p.pattern+'\0'+(p.flags||'');if(!cache.has(key))cache.set(key,new RegExp(p.pattern,(p.flags||'').replace(/g/g,'')));return cache.get(key)};
- return {checkDeadline,restart(milliseconds){started=now();budget=Math.min(10000,Math.max(1,milliseconds));},match(p,text){return compile(p).test(String(text??''));},captures(p,text){const input=String(text??'');if(input.length>(db.contract.expansion?.limits?.maximumMatchedTextCharacters||100000))fail('TEXT_LIMIT','Source text exceeds configured limit');const re=new RegExp(compile(p).source,unique((p.flags||'').replace(/g/g,'').split('').concat('g')).join(''));const out=[];let m;while((m=re.exec(input))!==null){out.push({text:m[0],index:m.index,end:m.index+m[0].length,groups:clone(m.groups||{})});if(!m[0].length)re.lastIndex++;if(out.length>2000)fail('TOKEN_LIMIT','Too many source captures');checkDeadline();}return out;}};
+ // One compiled entry per distinct pattern: the plain regex and its global twin are built once.
+ const entryFor=p=>{
+  const isObject=p!==null&&typeof p==='object';
+  if(isObject){const hit=byIdentity.get(p);if(hit&&hit.pattern===p.pattern&&hit.flags===p.flags)return hit;}
+  const key=p.pattern+'\0'+(p.flags||'');let entry=cache.get(key);
+  if(!entry){entry={re:new RegExp(p.pattern,(p.flags||'').replace(/g/g,'')),g:null,pattern:p.pattern,flags:p.flags};cache.set(key,entry);}
+  if(isObject)byIdentity.set(p,entry);
+  return entry;
+ };
+ const compile=p=>{checkDeadline();return entryFor(p).re;};
+ const copyGroups=g=>{const out={};if(g)for(const k of Object.keys(g)){const v=g[k];if(v!==undefined)out[k]=v;}return out;};
+ return {checkDeadline,tick(){if((++ticks&63)===0)checkDeadline();},restart(milliseconds){started=now();budget=Math.min(10000,Math.max(1,milliseconds));},match(p,text){return compile(p).test(String(text??''));},captures(p,text){
+  const input=String(text??'');if(input.length>(db.contract.expansion?.limits?.maximumMatchedTextCharacters||100000))fail('TEXT_LIMIT','Source text exceeds configured limit');
+  checkDeadline();const entry=entryFor(p);
+  if(!entry.g)entry.g=new RegExp(entry.re.source,unique((p.flags||'').replace(/g/g,'').split('').concat('g')).join(''));
+  const re=entry.g;re.lastIndex=0;const out=[];let m;
+  while((m=re.exec(input))!==null){out.push({text:m[0],index:m.index,end:m.index+m[0].length,groups:copyGroups(m.groups)});if(!m[0].length)re.lastIndex++;if(out.length>2000)fail('TOKEN_LIMIT','Too many source captures');checkDeadline();}
+  return out;}};
 }
 function evidenceOf(x){return unique(arr(x?.sourceSpans).concat(arr(x?.evidence))).filter(s=>s&&s.document_id&&s.node_id&&s.source_field&&typeof s.quote==='string'&&s.quote.length>0);}
 function field(text,spans,extra={}){return {sourceText:clean(text),sourceSpans:unique(spans),...extra};}
@@ -992,15 +1013,16 @@ function runAnalysis(db,request,runtime){
  return {...(roi?{roi}:{}),processing:{sourceCacheHit:!!cached,preparationMilliseconds:prepared-started,matchingMilliseconds:now()-prepared,recognitionChecks,formatCount:db.formats.length,eligibleFormatCount:eligible.length,sourceNodeCount:label.nodes.length},renalFields:unique(state.renalConstraints.map(c=>c.field)),status:selectedRegimens.length?'resolved':state.unresolved.length?'unresolved':'none',regimens:selectedRegimens,normalRegimens,renalSelection:{adjusted:adjusted.length>0,metrics},calculations:clone(request.calculations||[]),pendingRegimens,unresolved:unique(state.unresolved),excluded:unique(state.excluded),annotations:unique(state.annotations),diagnostics:unique(state.diagnostics),databaseVersion:db.databaseVersion};
 }
 let workerDatabase=null;
-function initializeWorker(database){
- workerDatabase=validateBundle(database);compiledDatabase(workerDatabase);
+function initializeWorker(database,trusted){
+ // The pool only ever sends the bundle its engine already validated; a worker need not repeat that pass.
+ workerDatabase=trusted===true?freeze(database):validateBundle(database);compiledDatabase(workerDatabase);
  const runtime=regexRuntime(workerDatabase);runtime.restart(10000);
  const errors=schemaErrors(workerDatabase,workerDatabase.schema,workerDatabase.schema,0,'database',runtime);if(errors.length)fail('DATABASE_SCHEMA','Database schema validation failed',{errors});
  return {valid:true,databaseVersion:workerDatabase.databaseVersion};
 }
 function runJob(job){const db=workerDatabase;if(!db)fail('WORKER_NOT_INITIALIZED','The interpreter has no validated database');const runtime=regexRuntime(db);if(job.kind==='calculate')return runSourceCalculation(db,job.request,runtime);if(job.kind==='evaluate')return evaluateExpression(job.expression,job.environment||{},db,runtime);if(job.kind==='validate')return {valid:true,databaseVersion:db.databaseVersion};return runAnalysis(db,job.request,runtime);}
 function workerSource(node){
- const factory='('+engineFactory.toString()+')(true)',handler="try{if(job.kind==='init'){const result=api.workerInit(job.database);send({kind:'ready',result});}else{send({kind:'started'});send({kind:'result',result:api.workerRun(job)});}}catch(e){send({kind:'error',error:{code:e.code||'ENGINE_ERROR',message:e.message,details:e.details||{}}});}";
+ const factory='('+engineFactory.toString()+')(true)',handler="try{if(job.kind==='init'){const result=api.workerInit(job.database,job.trusted===true);send({kind:'ready',result});}else{send({kind:'started'});send({kind:'result',result:api.workerRun(job)});}}catch(e){send({kind:'error',error:{code:e.code||'ENGINE_ERROR',message:e.message,details:e.details||{}}});}";
  return node?"const {parentPort}=require('node:worker_threads');const api="+factory+";const send=m=>parentPort.postMessage(m);parentPort.on('message',job=>{"+handler+"});":"const api="+factory+";const send=m=>self.postMessage(m);self.onmessage=e=>{const job=e.data;"+handler+"};";
 }
 // Reuse validated workers and source-only preparation. Requests/results are never
@@ -1033,7 +1055,7 @@ class WorkerPool {
    if(typeof process!=='undefined'&&process.versions?.node&&typeof require==='function'){const {Worker}=require('node:worker_threads');slot.worker=new Worker(workerSource(true),{eval:true});slot.worker.on('message',handle);slot.worker.on('error',error=>{if(!slot.closed)this.failSlot(slot,new EngineError('WORKER_ERROR',error.message));});slot.worker.on('exit',code=>{if(!slot.closed)this.failSlot(slot,new EngineError('WORKER_EXIT','Interpreter worker exited before completion'));});}
    else if(typeof Worker!=='undefined'&&typeof Blob!=='undefined'&&typeof URL!=='undefined'){slot.url=URL.createObjectURL(new Blob([workerSource(false)],{type:'text/javascript'}));slot.worker=new Worker(slot.url);slot.worker.onmessage=event=>handle(event.data);slot.worker.onerror=event=>{if(!slot.closed)this.failSlot(slot,new EngineError('WORKER_ERROR',event.message||'Worker failed'));};}
    else throw new EngineError('ISOLATION_UNAVAILABLE','A Web Worker or Node worker_threads is required');
-   this.arm(slot,30000);slot.worker.postMessage({kind:'init',database:this.database});
+   this.arm(slot,30000);slot.worker.postMessage({kind:'init',database:this.database,trusted:true});
   }catch(error){this.failSlot(slot,error);}
  }
  drain(){if(this.closed)return;this.queue=this.queue.filter(task=>!task.done);
@@ -1071,10 +1093,19 @@ class AMUEngine {
    isolated deadline worker when an expression may use a database regex. */
 function exprError(code, message) { const error = new Error(message); error.code = code; return error; }
 function exprOwn(value, key) { return value !== null && typeof value === 'object' && Object.prototype.hasOwnProperty.call(value, key); }
-function exprPath(root, name) {
+const exprPathCache = new Map();
+function exprPathKeys(name) {
   if (typeof name !== 'string' || name.length > 1024) throw exprError('INVALID_PATH', 'Expression path must be a bounded own-property path.');
-  const keys = name.split('.');
+  let keys = exprPathCache.get(name);
+  if (keys) return keys;
+  keys = name.split('.');
   if (!keys.length || keys.some(key => !key || !/^(?:[A-Za-z_$][A-Za-z0-9_$]*|\d+)$/.test(key) || ['__proto__', 'prototype', 'constructor'].includes(key))) throw exprError('INVALID_PATH', 'Unsafe or unsupported expression path.');
+  if (exprPathCache.size >= 4096) exprPathCache.clear();
+  exprPathCache.set(name, keys);
+  return keys;
+}
+function exprPath(root, name) {
+  const keys = exprPathKeys(name);
   let value = root;
   for (const key of keys) { if (!exprOwn(value, key)) return null; value = value[key]; }
   return value === undefined ? null : value;
@@ -1153,14 +1184,24 @@ function exprCompare(op, left, right, leftAst, rightAst, env, db, requiredMetric
   if (typeof lv !== 'number' || typeof rv !== 'number' || !Number.isFinite(lv) || !Number.isFinite(rv)) return null;
   return op === 'gt' ? lv > rv : op === 'gte' ? lv >= rv : op === 'lt' ? lv < rv : op === 'lte' ? lv <= rv : null;
 }
+const exprKnownOps = new Set(['all','any','not','eq','ne','gt','gte','lt','lte','exists','matches','in','contains','count','add','subtract','multiply','divide','minimum','maximum','coalesce','if','range_contains','quantity_compare']);
+const exprLimitCache = new WeakMap();
+function exprLimits(db) {
+  const cacheable = db !== null && typeof db === 'object';
+  if (cacheable) { const hit = exprLimitCache.get(db); if (hit) return hit; }
+  const limits = db && db.contract && db.contract.expansion && db.contract.expansion.limits;
+  const out = { maxDepth: Math.min(128, Number(limits && limits.maximumExpressionDepth) || 32), maxItems: Math.min(10000, Number(limits && limits.maximumCandidatesPerLabel) || 2000) };
+  if (cacheable) exprLimitCache.set(db, out);
+  return out;
+}
 function evaluateExpression(ast, env, db, runtime = {}) {
-  const maxDepth = Math.min(128, Number(db && db.contract && db.contract.expansion && db.contract.expansion.limits && db.contract.expansion.limits.maximumExpressionDepth) || 32);
-  const maxItems = Math.min(10000, Number(db && db.contract && db.contract.expansion && db.contract.expansion.limits && db.contract.expansion.limits.maximumCandidatesPerLabel) || 2000);
+  const { maxDepth, maxItems } = exprLimits(db);
   let evaluations = 0;
-  const knownOps = new Set(['all','any','not','eq','ne','gt','gte','lt','lte','exists','matches','in','contains','count','add','subtract','multiply','divide','minimum','maximum','coalesce','if','range_contains','quantity_compare']);
+  const knownOps = exprKnownOps;
+  const tick = typeof runtime.tick === 'function' ? runtime.tick : (typeof runtime.checkDeadline === 'function' ? runtime.checkDeadline : null);
   function evaluate(node, scope, depth) {
     if (depth > maxDepth || ++evaluations > maxItems * 64) throw exprError('EXPRESSION_LIMIT', 'Expression complexity limit exceeded.');
-    if (typeof runtime.checkDeadline === 'function') runtime.checkDeadline();
+    if (tick) tick();
     if (node === undefined || node === null) return null;
     if (typeof node === 'number') return Number.isFinite(node) ? node : null;
     if (typeof node === 'string' || typeof node === 'boolean') return node;
@@ -1188,6 +1229,12 @@ function evaluateExpression(ast, env, db, runtime = {}) {
       if (collection.length > maxItems) throw exprError('EXPRESSION_LIMIT','Constraint iteration limit exceeded.');
       const expression = Object.assign({},node); delete expression.forEach;
       return exprAll(collection.map(constraint => evaluate(expression,Object.assign({},scope,{constraint}),depth + 1)));
+    }
+    if ((node.op === 'all' || node.op === 'any') && Array.isArray(node.args)) {
+      // Three-valued logic: a definite false (all) / true (any) decides the result.
+      const isAll = node.op === 'all'; let unknown = false;
+      for (const arg of node.args) { const t = exprTruth(evaluate(arg, scope, depth + 1)); if (t === !isAll) return t; if (t === null) unknown = true; }
+      return unknown ? null : isAll;
     }
     const value = key => evaluate(node[key],scope,depth + 1);
     const args = () => Array.isArray(node.args) ? node.args.map(arg=>evaluate(arg,scope,depth+1)) : [value('left'),value('right')];

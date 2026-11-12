@@ -212,7 +212,7 @@
       cancelRunning();previousEngine?.cancelAnalyses();engine=next; generation++; analyses.clear(); jobs=[]; overrides=Object.create(null); fieldErrors.clear();
       calculationJob++; calculationState={key:null,status:'inactive',result:null};automaticDemand={scope:null,required:[],renalFields:[]};
       if (!modulesLoaded) {
-        await loadScript('./amu-ui.js?v=20261112-merged');
+        await loadScript('./amu-ui.js?v=20261112-label-fetch');
         await loadScript('./amu-resistance.js?v=20261112-merged');
         modulesLoaded=true;
         root.AMU_legacyDebugRegimens=root.AMU_debugRegimens;
@@ -469,7 +469,7 @@
     ensureCalculation();
     const wanted=new Set(),allergy=getAllergyState();
     const visible=drugs.filter(drug=>doesDrugMatchDiseaseSubfilter(drug)).filter(drug=>drug.forceShowEvenIfAllergic || evaluateDrugAllergyStatus(drug,allergy).status!=='BLOCKED');
-    visible.sort((a,b)=>Number(!!b.isSelectedPinned)-Number(!!a.isSelectedPinned)||(typeof contraAssess==='function'?contraAssess(a,allergy.renalFlag).s-contraAssess(b,allergy.renalFlag).s:0));
+    visible.sort((a,b)=>Number(!!b.isSelectedPinned)-Number(!!a.isSelectedPinned)||(typeof contraAssess==='function'?contraAssess(a,allergy.renalFlag).s-contraAssess(b,allergy.renalFlag).s:0)||((a.diversityRank??1e9)-(b.diversityRank??1e9)));
     for (const drug of visible) {
       if (!drug._amuLabel || !hasRetrievedOpenFdaLabel(drug) || fieldErrors.size) continue;
       const request=requestFor(drug),key=keyFor(drug,request); wanted.add(key);

@@ -617,7 +617,7 @@
   function patternReport(drugId) {
     const drug=(typeof currentFetchedDrugs==='undefined'?[]:currentFetchedDrugs).find(item=>String(item.id)===String(drugId)),entry=drug&&entryFor(drug);
     if(!entry?.result?.roi||entry.pending)return null;
-    return {reportType:'amu-roi-pattern-review/1',databaseVersion:engine.database.databaseVersion,engineVersion:root.AMUEngine.version,unmatchedPatterns:clone(entry.result.roi.unmatchedPatterns),notes:'Source passages and disabled format drafts only. No patient inputs are included. Review extraction rules and run source/boundary/exclusion tests before enabling a draft.'};
+    return {reportType:'amu-roi-pattern-review/1',databaseVersion:engine.database.databaseVersion,engineVersion:root.AMUEngine.version,unmatchedPatterns:clone(entry.result.roi.unmatchedPatterns),notes:'Source passages and disabled format drafts only. No patient inputs are included. Each draft recognizes one structural fingerprint. Import it with tools/import-roi-patterns.cjs, then add source, missing-input, boundary and incompatible-branch cases before validation. The importer cannot enable a draft.'};
   }
   function downloadPatternReport(drugId) {
     const report=patternReport(drugId);if(!report)return;

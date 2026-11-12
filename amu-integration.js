@@ -212,8 +212,8 @@
       cancelRunning();previousEngine?.cancelAnalyses();engine=next; generation++; analyses.clear(); jobs=[]; overrides=Object.create(null); fieldErrors.clear();
       calculationJob++; calculationState={key:null,status:'inactive',result:null};automaticDemand={scope:null,required:[],renalFields:[]};
       if (!modulesLoaded) {
-        await loadScript('./amu-ui.js?v=20261112-refine');
-        await loadScript('./amu-resistance.js?v=20261112-refine');
+        await loadScript('./amu-ui.js?v=20261112-merged');
+        await loadScript('./amu-resistance.js?v=20261112-merged');
         modulesLoaded=true;
         root.AMU_legacyDebugRegimens=root.AMU_debugRegimens;
         root.AMU_debugRegimens=name => {

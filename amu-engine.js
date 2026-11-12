@@ -1,4 +1,4 @@
-/* AMU Engine 1.1.1 — one-file interpreter for amu-database.json.
+/* AMU Engine 1.1.2 — one-file interpreter for amu-database.json.
  * Browser: const engine = await AMUEngine.load('./amu-database.json');
  * Node: const { AMUEngine } = require('./amu-engine.js');
  * await engine.analyze({ label, patient, clinicalContext });
@@ -10,7 +10,7 @@
 function engineFactory(isolated) {
 'use strict';
 isolated = isolated === true;
-const VERSION='1.1.1', PROTOCOL='amu-declarative-label-rules/1';
+const VERSION='1.1.2', PROTOCOL='amu-declarative-label-rules/1';
 const OPERATIONS=new Set(['select','bind_roles','inherit_scope','tokenize','group','join','filter','require','project','attach_evidence','emit','annotate','exclude']);
 const EXPRESSIONS=new Set(['all','any','not','eq','ne','gt','gte','lt','lte','exists','matches','in','contains','count','add','subtract','multiply','divide','minimum','maximum','coalesce','if','range_contains','quantity_compare']);
 const FORBIDDEN=new Set(['__proto__','prototype','constructor']);
@@ -115,7 +115,7 @@ function compiledDatabase(db){
  const stageCache=new Map();
  compiled.stages={get(format){let stages=stageCache.get(format);if(stages)return stages;const pipelineKey=JSON.stringify([format.mode,format.processing.pipelineRef,format.processing.parameters||{}]);if(!expandedPipelines.has(pipelineKey)){const params=merge(db.defaults?.processingParameters?.[format.mode]||{},format.processing.parameters||{});expandedPipelines.set(pipelineKey,db.pipelines[format.processing.pipelineRef].stages.map(stage=>({...stage,arguments:parameterize(stage.arguments,params)})));}stages=expandedPipelines.get(pipelineKey);stageCache.set(format,stages);return stages;}};
  for(const format of db.formats){
-  if(!format.enabled)continue;
+  if(!format.enabled||inactiveRoiDraft(format))continue;
   const allowed=kinds(format.recognition),entry={format,order:compiled.entries.length,guards:guards(format.recognition),kinds:allowed};compiled.entries.push(entry);
   if(!allowed)compiled.unrestricted.push(entry);else for(const kind of allowed){if(!compiled.dispatch.has(kind))compiled.dispatch.set(kind,[]);compiled.dispatch.get(kind).push(entry);}
  }
@@ -289,6 +289,17 @@ function finishNodes(state){
 }
 // Source-scoped ROI planning precedes format recognition. The plan contains no
 // patient values and is rebuilt for each clinical context, even on a source hit.
+function inactiveRoiDraft(format){const status=format?.documentation?.roiPattern?.status;return typeof status==='string'&&status!=='validated';}
+function shapeRoiDraft(reference,region,policy,sourceDocument){
+ const draft=clone(reference),shape=region.shape,scopeKind=region.kind==='table.row'?'table':'prose.clause';
+ draft.id=shape.fingerprint;draft.version=1;draft.enabled=false;draft.priority=60;
+ draft.recognition={op:'all',args:[{op:'eq',left:{path:'scope.kind'},right:scopeKind},{op:'eq',left:{path:'features.roi.selected'},right:true},{op:'contains',left:{path:'features.roi.fingerprints'},right:shape.fingerprint}]};
+ draft.applicability={fieldRefs:[],missingValue:'unresolved',conflictingValues:'unresolved'};
+ draft.output={...draft.output,mayCreateRegimen:false};
+ draft.documentation={summary:'Unmatched ROI pattern draft. Recognition is limited to this structural fingerprint and stays disabled until source review and executable tests.',observedShape:shape,sourceDocument:sourceDocument||null,roiPattern:{status:policy.patternDraft.activation||'disabled_until_source_review_and_executable_tests',fingerprint:shape.fingerprint,maySupplyLabelDose:false}};
+ draft.processing={...draft.processing,parameters:{...draft.processing.parameters,selector:{nodeTypes:[region.kind],withinSourceFields:policy.sourceFields,roiFingerprint:shape.fingerprint}}};
+ return draft;
+}
 function roiPolicy(db){return db.lexicons?.roi?.enabled===true?db.lexicons.roi:null;}
 function validateRoiPolicy(db){
  const p=roiPolicy(db);if(!p)return;
@@ -342,6 +353,21 @@ function roiLinkedPassages(node,state){
  }
  return linked;
 }
+function roiLeadingLabel(node,state){
+ if(node.kind!=='prose.clause'||node.fields?.indication?.sourceText||arr(node.cells).some(cell=>cell.roles?.indication))return '';
+ const policy=roiPolicy(state.db);let earliest=null;
+ for(const name of policy.patternDraft.grammarRefs){const grammar=state.db.tokenGrammars[name];if(!grammar)continue;const hit=state.runtime.captures(grammar,node.text)[0];if(hit&&(earliest==null||hit.index<earliest))earliest=hit.index;}
+ if(earliest==null)return '';
+ const prefix=node.text.slice(0,earliest),mark=prefix.lastIndexOf(':');if(mark<0)return '';
+ const preceding=prefix.slice(0,mark),heading=clean(preceding.slice(preceding.lastIndexOf(':')+1));
+ if(!heading||heading.length>160)return '';
+ const generic=state.db.lexicons?.sourceScopeRules?.genericRegimenContext;
+ if(generic&&state.runtime.match(generic,heading)||policy.nonClinicalHeading&&state.runtime.match(policy.nonClinicalHeading,heading))return '';
+ // A weight, age, renal or severity label is a patient axis, not a sibling disease.
+ for(const name of ['population','weight','renal','severity','surface_area']){const rule=state.db.roleRules[name];if(rule&&state.runtime.match(rule.matches,heading))return '';}
+ for(const term of arr(policy.vocabulary?.physiology))if(term.pattern&&state.runtime.match(term.pattern,heading))return '';
+ return heading;
+}
 function buildRoiPlan(state){
  const p=roiPolicy(state.db);if(!p)return;
  const context=state.context,terms=unique([context.indication||context.label||'',...arr(context.indicationTerms)].flatMap(t=>expandContext(t,state.db))),links=roiIndicationLinks(state,terms),wanted=sourceOrganisms(context.organism||context.pathogen||'',state.db);
@@ -350,7 +376,7 @@ function buildRoiPlan(state){
  const dosePattern=state.db.tokenGrammars.mass_activity_amount;
  for(const node of state.label.nodes){
   if(!['table.row','prose.clause'].includes(node.kind)||!p.sourceFields.includes(node.source_field))continue;
-  state.runtime.checkDeadline();const ancestors=roiAncestors(node,state),indCells=arr(node.cells).filter(c=>c.roles?.indication),rawInd=node.fields?.indication?.sourceText||(indCells.length?indCells.map(c=>c.text).join(' | '):'');
+  state.runtime.checkDeadline();const ancestors=roiAncestors(node,state),indCells=arr(node.cells).filter(c=>c.roles?.indication),rawInd=node.fields?.indication?.sourceText||(indCells.length?indCells.map(c=>c.text).join(' | '):'')||roiLeadingLabel(node,state);
   const clinicalHead=ancestors.find(n=>['section.heading','table.caption'].includes(n.kind)&&n.text!==n.source_field?.replace(/_/g,' ')&&!(generic&&state.runtime.match(generic,n.text))&&!(p.nonClinicalHeading&&state.runtime.match(p.nonClinicalHeading,n.text)));
   const rawGeneral=!!(rawInd&&(generic&&state.runtime.match(generic,rawInd)||state.runtime.match(dosePattern,rawInd)||p.nonClinicalHeading&&state.runtime.match(p.nonClinicalHeading,rawInd))),indication=rawInd&&!rawGeneral?rawInd:clinicalHead?.text||rawInd||'',local=[node.text,...ancestors.map(n=>n.text)].join(' '),doseInd=indication&&state.runtime.match(dosePattern,indication),general=!!(indication&&(generic&&state.runtime.match(generic,indication)||doseInd||p.nonClinicalHeading&&state.runtime.match(p.nonClinicalHeading,indication)));
   const explicit=!!indication&&!general,blank=indCells.length>0&&!clean(rawInd),sourceText=explicit?indication:local;
@@ -390,7 +416,7 @@ function buildRoiPlan(state){
  // population paragraph into the selected regimen's dose eligibility branch.
  const shared=state.label.nodes.filter(n=>n.kind==='prose.clause'&&arr(p.sharedConditionFields).includes(n.source_field)).flatMap(n=>{const mentions=roiMentions(n,state);return mentions.length?[{nodeId:n.id,sourceField:n.source_field,sourceText:n.text,sourceSpans:evidenceOf(n),physiology:mentions}]:[];});
  state.roi={roots,byNode,selected,scopes,patterns,links,shared,terms,candidateConstraints:new Map()};
- for(const scoped of state.scopes){const relevant=scoped.node.kind==='table'?roots.filter(r=>r.selected&&r.tableId===scoped.node.id):roots.filter(r=>r.selected&&(r.nodeId===scoped.node.id||r.relationships.some(l=>l.nodeId===scoped.node.id)));scoped.features.roi={selected:relevant.length>0,count:relevant.length};}
+ for(const scoped of state.scopes){const relevant=scoped.node.kind==='table'?roots.filter(r=>r.selected&&r.tableId===scoped.node.id):roots.filter(r=>r.selected&&(r.nodeId===scoped.node.id||r.relationships.some(l=>l.nodeId===scoped.node.id)));scoped.features.roi={selected:relevant.length>0,count:relevant.length,fingerprints:unique(relevant.map(region=>region.shape.fingerprint))};}
 }
 function roiConstraintGuard(node,constraints,state){
  if(!state.roi)return constraints;
@@ -414,8 +440,7 @@ function roiReport(state,regimens,pending,references=[]){
   region.status=resolvedIds.has(region.id)?'resolved':referenceIds.has(region.id)?'reference_only':pendingIds.has(region.id)||failures.some(r=>arr(r.missingFields).length)?'needs_inputs':excluded.length?'excluded':failures.length?'unsupported_or_ambiguous':region.hasRegimen?'unmatched_pattern':'context_only';
   region.conditions=unique(failures.flatMap(r=>arr(r.conditions)));region.missingFields=unique(failures.flatMap(r=>arr(r.missingFields)));
   if(['unmatched_pattern','unsupported_or_ambiguous'].includes(region.status)&&region.hasRegimen){
-   const shape=region.shape,reference=state.db.formats.find(f=>f.processing.pipelineRef===p.patternDraft.pipelineRef&&f.mode==='extractor'&&f.enabled),draft=reference?clone(reference):null;
-   if(draft){draft.id=shape.fingerprint;draft.version=1;draft.enabled=false;draft.priority=60;draft.recognition={op:'all',args:[{op:'eq',left:{path:'scope.kind'},right:region.kind==='table.row'?'table':'prose.clause'},{op:'eq',left:{path:'features.roi.selected'},right:true}]};draft.documentation={summary:'Unmatched ROI pattern draft; review capture rules and source constraints before enabling.',observedShape:shape,sourceDocument:state.label.identity.document_id};draft.processing.parameters={...draft.processing.parameters,selector:{nodeTypes:[region.kind],withinSourceFields:p.sourceFields}};}
+   const shape=region.shape,reference=state.db.formats.find(f=>f.processing.pipelineRef===p.patternDraft.pipelineRef&&f.mode==='extractor'&&f.enabled),draft=reference?shapeRoiDraft(reference,region,p,state.label.identity.document_id):null;
    unmatched.push({fingerprint:shape.fingerprint,status:region.status,sourceIdentity:clone(state.label.identity),sourceText:region.sourceText,sourceSpans:region.sourceSpans,relationships:region.relationships,physiology:region.physiology,shape,matchedFormats:region.matchedFormats,diagnostics:state.diagnostics.filter(d=>d.candidateId===region.id),formatDraft:draft});
   }
  }
@@ -868,7 +893,7 @@ function executePipeline(f,scope,state){
  const candidateLimit=state.db.contract.expansion?.limits?.maximumCandidatesPerLabel||2000;
  for(const s of stages){state.runtime.checkDeadline();const a=s.arguments,input=outputs[s.input];let result=[];
   switch(s.operation){
-  case 'select':{const selector=a.selector||{};result=input.filter(n=>withinScope(n,scope,state)&&(!selector.nodeTypes||selector.nodeTypes.includes(n.kind))&&(!selector.withinSourceFields||selector.withinSourceFields.includes(n.source_field))&&(f.mode!=='extractor'||!state.roi||state.roi.selected.has(n.id))&&!arr(selector.excludeRoles).some(r=>n.roles?.[r])&&!state.excludedIds.has(n.id));result=result.map(n=>clone(n));break;}
+  case 'select':{const selector=a.selector||{};result=input.filter(n=>withinScope(n,scope,state)&&(!selector.nodeTypes||selector.nodeTypes.includes(n.kind))&&(!selector.withinSourceFields||selector.withinSourceFields.includes(n.source_field))&&(!selector.roiFingerprint||state.roi?.byNode.get(n.id)?.shape?.fingerprint===selector.roiFingerprint)&&(f.mode!=='extractor'||!state.roi||state.roi.selected.has(n.id))&&!arr(selector.excludeRoles).some(r=>n.roles?.[r])&&!state.excludedIds.has(n.id));result=result.map(n=>clone(n));break;}
   case 'bind_roles':result=input.map(n=>({...n,fields:{...clone(n.fields||{}),...nodeRoleFields(n,f,state)}}));break;
   case 'inherit_scope':result=input.map(n=>{const links=linkedNodes(n,a,state);return {...n,scopeNodes:links,sourceSpans:unique(evidenceOf(n).concat(links.flatMap(evidenceOf)))};});break;
   case 'tokenize':result=input.map(n=>{const ids=unique(arr(a.grammarRefs).concat(Object.values(f.bindings||{}).map(b=>b.grammarRef).filter(Boolean))),tokens=[];for(const id of ids){const g=state.db.tokenGrammars[id];for(const source of captureNodes(n,f,id,state)){let captures=captureSource(g,source,state);if(!captures.length)captures=inheritedUnitCapture(source,g,state);for(const cap of captures){tokens.push({...cap,grammar:id,sourceNode:source.id,sourceSpans:cap.sourceSpans||evidenceOf(source)});}}}return {...n,tokens};});break;
@@ -1015,6 +1040,7 @@ function runAnalysis(db,request,runtime){
 let workerDatabase=null;
 function initializeWorker(database,trusted){
  // The pool only ever sends the bundle its engine already validated; a worker need not repeat that pass.
+ preparedSources.clear();preparedSourceBytes=0;
  workerDatabase=trusted===true?freeze(database):validateBundle(database);compiledDatabase(workerDatabase);
  const runtime=regexRuntime(workerDatabase);runtime.restart(10000);
  const errors=schemaErrors(workerDatabase,workerDatabase.schema,workerDatabase.schema,0,'database',runtime);if(errors.length)fail('DATABASE_SCHEMA','Database schema validation failed',{errors});

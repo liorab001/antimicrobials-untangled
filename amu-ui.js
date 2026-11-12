@@ -14,20 +14,20 @@
       alertBox.classList.add("hidden");
 
       if (/\d{2,}/.test(trimmed)) {
-        showPiiBlock("Blocked: Numeric sequences (dates, ages, IDs, or phone numbers) are prohibited.");
+        showPiiBlock("The search box does not accept a number of two or more digits.");
         return false;
       }
       if (/[@\/\\]/.test(trimmed)) {
-        showPiiBlock("Blocked: Special characters (@, /) associated with emails or dates are prohibited.");
+        showPiiBlock("The search box does not accept @ or slashes.");
         return false;
       }
       if (/\b(mr|mrs|ms|miss|dr|patient|pacient|name|jméno|dob|born|age|male|female|ward|room|bed|chart|id|ssn)\b/i.test(trimmed)) {
-        showPiiBlock("Blocked: Personal identifiers or patient chart descriptors are strictly prohibited.");
+        showPiiBlock("The search box blocked a word on its keyword list, such as patient, age, or name. A name without one of those words is not detected.");
         return false;
       }
       const words = trimmed.split(/\s+/);
       if (trimmed.length > 48 || words.length > 4) {
-        showPiiBlock("Blocked: Enter only a 1–4 word generic drug, microbe, or syndrome name.");
+        showPiiBlock("Enter only a 1–4 word generic drug, microbe, or syndrome name.");
         return false;
       }
       return true;
@@ -35,7 +35,7 @@
 
     function showPiiBlock(msg) {
       const alertBox = document.getElementById("piiFirewallAlert");
-      alertBox.innerHTML = `<i class="fa-solid fa-shield-halved mr-1"></i> <strong>Search-box identifier block:</strong> ${msg}`;
+      alertBox.innerHTML = `<i class="fa-solid fa-shield-halved mr-1"></i> <strong>Search-box filter:</strong> ${esc(msg)}`;
       alertBox.classList.remove("hidden");
     }
 
@@ -123,7 +123,7 @@
       status.textContent = `Active filter: ${active ? active.label : "All pathogens"}`;
       const choices = [{ id: "all", label: "All pathogens" }, ...map.pathogens.map(p => ({ id: p.id, label: p.label }))];
       pills.innerHTML = choices.map(p => `
-        <button type="button" onclick="selectSyndromePathogenFilter('${p.id}')" class="px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${activeSyndromePathogenId === p.id ? 'bg-indigo-600 text-white border-indigo-600 shadow' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-indigo-50 hover:text-indigo-700'}">
+        <button type="button" onclick="selectSyndromePathogenFilter('${jsArg(p.id)}')" class="px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${activeSyndromePathogenId === p.id ? 'bg-indigo-600 text-white border-indigo-600 shadow' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-indigo-50 hover:text-indigo-700'}">
           <i class="fa-solid ${p.id === 'all' ? 'fa-layer-group' : 'fa-bacterium'} text-[10px] mr-1"></i>${esc(p.label)}
         </button>`).join("");
       note.textContent = map.note || "Select one pathogen to narrow suggestions, or keep All pathogens to see agents associated with likely pathogens.";
@@ -833,8 +833,8 @@
     function renderSystemTabs() {
       const systems = Object.keys(directoryTaxonomy);
       document.getElementById("systemTabs").innerHTML = systems.map(sys => `
-        <button onclick="selectSystem('${sys}')" class="px-2.5 py-1 text-[11px] rounded-md font-semibold transition-colors ${sys === activeSystem ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}">
-          ${sys}
+        <button onclick="selectSystem('${jsArg(sys)}')" class="px-2.5 py-1 text-[11px] rounded-md font-semibold transition-colors ${sys === activeSystem ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}">
+          ${esc(sys)}
         </button>
       `).join("");
     }
@@ -848,8 +848,8 @@
     function renderSyndromeList() {
       const list = directoryTaxonomy[activeSystem] || [];
       document.getElementById("syndromeList").innerHTML = list.map(item => `
-        <button onclick="executeUntangleSearch('${item.query.replace(/'/g, "\\'")}', false)" class="w-full text-left px-3 py-2 rounded-lg text-xs font-medium bg-slate-50 hover:bg-blue-50 hover:text-blue-700 border border-slate-200/80 transition-colors flex items-center justify-between group">
-          <span>${item.label}</span>
+        <button onclick="executeUntangleSearch('${jsArg(item.query)}', false)" class="w-full text-left px-3 py-2 rounded-lg text-xs font-medium bg-slate-50 hover:bg-blue-50 hover:text-blue-700 border border-slate-200/80 transition-colors flex items-center justify-between group">
+          <span>${esc(item.label)}</span>
           <i class="fa-solid fa-chevron-right text-[10px] text-slate-300 group-hover:text-blue-500"></i>
         </button>
       `).join("");
@@ -1076,18 +1076,18 @@
           const isSelected = d.id === activeDiseaseFilterId;
           return `
             <button 
-              onclick="selectPathogenDiseaseFilter('${d.id}')" 
+              onclick="selectPathogenDiseaseFilter('${jsArg(d.id)}')" 
               class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 border ${isSelected ? 'bg-indigo-600 text-white border-indigo-600 shadow' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-indigo-50 hover:text-indigo-700'}"
             >
               <i class="fa-solid ${d.id === 'all' ? 'fa-layer-group' : 'fa-stethoscope'} text-[10px]"></i>
-              <span>${d.label}</span>
+              <span>${esc(d.label)}</span>
             </button>
           `;
         }).join("");
 
         if (activeObj.note) {
           noteBox.classList.remove("hidden");
-          noteBox.innerHTML = `<i class="fa-solid fa-circle-info text-indigo-600 mr-1.5"></i><strong>${activeObj.label} — Clinical Guidance:</strong> ${activeObj.note}`;
+          noteBox.innerHTML = sandboxIndexNote(activeObj.label, activeObj.note);
         } else {
           noteBox.classList.add("hidden");
         }
@@ -1105,10 +1105,10 @@
           const isSelected = d.id === activeDiseaseFilterId;
           return `
             <button 
-              onclick="selectPathogenDiseaseFilter('${d.id}')" 
+              onclick="selectPathogenDiseaseFilter('${jsArg(d.id)}')" 
               class="px-3 py-1 rounded-lg text-xs font-bold transition-all border ${isSelected ? 'bg-indigo-600 text-white border-indigo-600 shadow' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-indigo-50'}"
             >
-              ${d.label}
+              ${esc(d.label)}
             </button>
           `;
         }).join("");
@@ -4100,14 +4100,14 @@
       const safePreview = esc(flagObj.previewExcerpt);
       return `
         <li 
-          onclick="openMonographModal('${drugId}', '${sectionKey}', '${flagObj.reasonSummary.replace(/'/g, "\\'")}')"
+          onclick="openMonographModal('${jsArg(drugId)}', '${jsArg(sectionKey)}', '${jsArg(flagObj.reasonSummary)}')"
           class="relative group cursor-pointer p-2.5 rounded-lg bg-purple-950 text-purple-100 border border-purple-500 hover:bg-purple-900 transition-all text-[11px] leading-snug flex items-start gap-2 shadow-sm"
         >
           <i class="fa-solid fa-triangle-exclamation text-amber-400 mt-0.5 shrink-0"></i>
           <div class="flex-1">
             <div class="flex items-center justify-between gap-1">
               <span class="font-extrabold text-amber-300 uppercase tracking-wider text-[10px]">
-                Self-Regulation Flag: ${flagObj.reasonSummary}
+                Self-Regulation Flag: ${esc(flagObj.reasonSummary)}
               </span>
               <span class="text-[10px] bg-purple-800 text-purple-200 px-1.5 py-0.5 rounded border border-purple-600 shrink-0">
                 Hover Preview • Click Full Text ↗
@@ -4219,16 +4219,16 @@
         && !(renalView.adjusted && /^(?:FDA renal-label text|Renal label review)/i.test(b.tag || "")));
       const visibleSelfReg1 = null; // Declarative interpreter supplies resolution notices.
 
-      let statusBadge = `<span class="bg-emerald-100 text-emerald-800 border border-emerald-200 text-[10px] font-bold px-2.5 py-0.5 rounded-full"><i class="fa-solid fa-check mr-1"></i>No allergy-class flag on this filter</span>`;
+      let statusBadge = `<span class="bg-slate-100 text-slate-700 border border-slate-300 text-[10px] font-bold px-2.5 py-0.5 rounded-full">No allergy-class flag on this filter</span>`;
       if (isAllergyBlocked) {
-        statusBadge = `<span class="bg-rose-600 text-white border border-rose-800 text-[10px] font-extrabold px-3 py-1 rounded-full"><i class="fa-solid fa-ban mr-1"></i>Allergy-class filter match: ${drug.evalResult.specificAllergy}</span>`;
+        statusBadge = `<span class="bg-rose-600 text-white border border-rose-800 text-[10px] font-extrabold px-3 py-1 rounded-full"><i class="fa-solid fa-ban mr-1"></i>Allergy-class filter match: ${esc(drug.evalResult.specificAllergy)}</span>`;
       } else if (isCaution) {
-        statusBadge = `<span class="bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-bold px-2.5 py-0.5 rounded-full">${drug.evalResult.reason}</span>`;
+        statusBadge = `<span class="bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-bold px-2.5 py-0.5 rounded-full">${esc(drug.evalResult.reason)}</span>`;
       }
 
       const rp = drug.renalProfile;
       const isRenalContra = rp.contraLevel.includes("CONTRAINDICATION") || rp.contraLevel.includes("NEUROTOXICITY") || rp.contraLevel.includes("NEPHROTOXIC");
-      if (isRenalActive && isRenalContra && rp.contraNote) visibleRenalBullets.unshift({color:"red",tag:"App renal screening caution",text:rp.contraNote});
+      if (isRenalActive && isRenalContra) visibleRenalBullets.unshift({color:"red",tag:"Renal text filter",text:"This filter matches a renal caution phrase in the index. This sandbox does not restate an amount. Open the monograph."});
 
       const showExpand1 = !!dosingSourceForDisplay && hasMeaningfulExtraText(dosingSourceForDisplay, visibleDosingBullets);
       const showExpand2 = hasMeaningfulExtraText(drug.rawInteractions, drug.interactionBullets);
@@ -4307,7 +4307,7 @@
             <div class="flex flex-wrap gap-1.5">
               ${visibleRiskBadges.map(b => `
                 <span class="text-[10px] font-bold px-2 py-0.5 rounded border flex items-center gap-1 ${b.color}">
-                  <i class="fa-solid ${b.icon}"></i> ${b.label}
+                  <i class="fa-solid ${esc(b.icon)}"></i> ${esc(riskBadgeText(b.label))}
                 </span>
               `).join("")}
             </div>
@@ -4431,7 +4431,8 @@
         const clean = isExcerpt
           ? String(t).replace(/^FDA (pediatric|pregnancy) text:/, "Product-label $1 excerpt:")
           : String(t).replace(/\bFDA(?:[- ]class)?(?: (?:labeling|label|warning))?\b/gi, "app reference");
-        f.push({ l, t: `${isExcerpt ? "" : "<span class=\"font-semibold\">Legacy app reference, not a prescribing instruction:</span> "}${clean}`, src: cur, evidenceSource: isExcerpt ? "retrieved_label" : "legacy_app" });
+        const prefix = isExcerpt ? "" : "Legacy app reference, not a prescribing instruction: ";
+        f.push({ l, t: prefix + clean, src: cur, evidenceSource: isExcerpt ? "retrieved_label" : "legacy_app" });
       };
       const P = $id("ptPreg").checked, H = ($id("ptHepClass")?.value || "none") !== "none";
 
@@ -4442,11 +4443,11 @@
       if (A < 0.17 && /sulfamethoxazole/.test(n)) add("red", "Infant <2 months: contraindicated (FDA label).");
       if (A < 18) {
         const pk = isCombinationProductName(d.activeIngredientSource || d.genericName) ? null : Object.keys(PED_DOSE).find(x => U.includes(x));
-        if (A < 0.25) add("blue", "Under 3 months: dosing is age/gestation-specific — use specialist/pharmacy dosing (not computed).");
-        else if (pk) add("blue", `Pediatric dose (FDA label, ${ptKg.toFixed(1)} kg): ` + PED_DOSE[pk](ptKg, A) + (ptKg >= 40 ? " — ≥40 kg: adult dosing may apply." : ""));
-        else add("blue", `Pediatric dosing is weight-based (${ptKg.toFixed(1)} kg entered): follow the label's mg/kg table — not computed for this drug.`);
+        if (A < 0.25) add("blue", "Under 3 months: the label uses age and gestation. This sandbox does not compute an amount.");
+        else if (pk) add("blue", "Label mg/kg text, not a calculated amount: " + PED_DOSE[pk]());
+        else add("blue", "Pediatric label text is weight-based. This sandbox does not multiply the entered weight into a milligram amount.");
         const s = extractCleanSentence(d.rawRenalPop, "pediatric", 230);
-        if (s && /pediatric|children|infant|neonat/i.test(s)) add("blue", "FDA pediatric text: " + esc(s));
+        if (s && /pediatric|children|infant|neonat/i.test(s)) add("blue", "FDA pediatric text: " + s);
       }
       if (P) { cur = "preg";
         if (/cycline/.test(n)) add("red", "Pregnancy: tetracyclines can cause fetal harm and tooth/bone discoloration — avoid (FDA labeling).");
@@ -4456,46 +4457,36 @@
         if (/(voriconazole|fluconazole)/.test(n)) add("amber", "Pregnancy: azoles may cause fetal harm (FDA); use only if benefit justifies risk.");
         if (/nitrofurantoin/.test(n)) add("amber", "Pregnancy: contraindicated at term/labor (neonatal hemolytic anemia).");
         const s = extractCleanSentence(d.rawRenalPop, "pregnan", 230);
-        if (s && /pregnan/i.test(s)) add("blue", "FDA pregnancy text: " + esc(s));
+        if (s && /pregnan/i.test(s)) add("blue", "FDA pregnancy text: " + s);
       }
       if (H) { cur = "hep";
-        if (/metronidazole/.test(n)) add("amber", "Severe hepatic impairment (Child-Pugh C): reduce dose by 50% (FDA label).");
-        if (/tigecycline/.test(n)) add("amber", "Child-Pugh C: 100 mg load, then 25 mg q12h (FDA label).");
-        if (/voriconazole/.test(n)) add("amber", "Child-Pugh A/B: standard load, then halve maintenance; C: no data — use only if benefit outweighs risk (FDA label).");
-        if (/rifampin/.test(n)) add("amber", "Impaired liver function: use only if necessary, under close supervision (FDA label).");
-        if (/ceftriaxone/.test(n)) add("amber", "Hepatic + renal impairment together: cap at 2 g/day (FDA label).");
-        if (/clindamycin/.test(n)) add("amber", "Moderate–severe liver disease: half-life prolonged — monitor LFTs.");
+        if (/metronidazole|tigecycline|voriconazole|rifampin|ceftriaxone|clindamycin/.test(n)) add("amber", "The label has a hepatic-impairment branch for this filter. This sandbox does not restate an amount. Open the monograph.");
       }
       cur = "renal";
       const mode = rrtMode();
       if (mode === "crrt") {
-        add("amber", "CRRT: clearance differs from eGFR <30 — do NOT apply the <30 reductions (risk of underdosing). " + (/(meropenem|piperacillin|vancomycin|cefepime|ceftazidime)/.test(n) ? "Commonly needs higher doses than <30 schedules; dose with CRRT-specific references and TDM." : "Dose with CRRT-specific references/pharmacy and TDM where available."));
+        add("amber", "CRRT is selected. This sandbox does not restate a CRRT amount. Open the monograph.");
       } else if (mode === "hd") {
         const hk = Object.keys(HD_NOTE).find(x => U.includes(x));
-        if (hk) add("amber", "Intermittent HD: " + HD_NOTE[hk]);
+        if (hk) add("amber", "Intermittent hemodialysis is selected. This sandbox does not restate a dialysis amount. Open the monograph.");
       } else if (Number.isFinite(crcl)) {
         const k = Object.keys(RENAL_MOD).find(x => U.includes(x));
-        if (k && crcl <= RENAL_MOD[k][2]) add(RENAL_MOD[k][0], `CrCl ${Math.round(crcl)} mL/min: ` + RENAL_MOD[k][1]);
+        if (k && crcl <= RENAL_MOD[k][2]) add("amber", `CrCl ${Math.round(crcl)} mL/min is the sample filter. The label has a renal branch for this filter. This sandbox does not restate an amount. Open the monograph.`);
       }
       if (Number.isFinite(egfr) && egfr > 130 && /(cillin|cef|penem|aztreonam|vancomycin|gentamicin|amikacin|tobramycin)/.test(n)) {
-        add("amber", "Augmented renal clearance (eGFR >130): risk of subtherapeutic levels — consider extended/continuous infusion or more frequent dosing for time-dependent agents, with TDM.");
+        add("amber", "eGFR above 130 is selected. This sandbox does not restate an infusion or an amount. Open the monograph.");
       }
       cur = "wt";
       if (A >= 18) {
-        const m = x => Math.round(x).toLocaleString();
         if (/daptomycin/.test(n)) {
           const context = getActiveClinicalDosingContext();
           const contextText = context ? normalizeClinicalKeyword(`${context.label} ${(context.keywords || []).join(" ")}`) : "";
-          if (!context) {
-            add("blue", `Weight-based (actual body weight, FDA label): 4 mg/kg skin = ${m(4 * ptKg)} mg; 6 mg/kg S. aureus bacteremia/endocarditis = ${m(6 * ptKg)} mg.`);
-          } else if (/\b(bacteremia|septicemia|endocarditis|bloodstream)\b/.test(contextText)) {
-            add("blue", `Weight-based (actual body weight, FDA label): 6 mg/kg for S. aureus bacteremia/endocarditis = ${m(6 * ptKg)} mg.`);
-          } else if (/\b(skin|cellulitis|abscess|wound|soft tissue)\b/.test(contextText)) {
-            add("blue", `Weight-based (actual body weight, FDA label): 4 mg/kg for skin/skin-structure infection = ${m(4 * ptKg)} mg.`);
-          }
+          if (!context) add("blue", "Label text names 4 mg/kg for skin and 6 mg/kg for S. aureus bacteremia or endocarditis. The entered weight is not multiplied into a milligram amount.");
+          else if (/\b(bacteremia|septicemia|endocarditis|bloodstream)\b/.test(contextText)) add("blue", "Label text names 6 mg/kg for S. aureus bacteremia or endocarditis. The entered weight is not multiplied into a milligram amount.");
+          else if (/\b(skin|cellulitis|abscess|wound|soft tissue)\b/.test(contextText)) add("blue", "Label text names 4 mg/kg for skin and skin-structure infection. The entered weight is not multiplied into a milligram amount.");
         }
-        if (/vancomycin/.test(n)) add("blue", `Loading 20–25 mg/kg actual body weight = ${m(20 * ptKg)}–${m(Math.min(25 * ptKg, 3000))} mg (commonly capped at 3 g); maintenance by AUC/TDM.`);
-        if ((ptKg >= 100 || ptKg < 50) && /(gentamicin|tobramycin|amikacin)/.test(n)) add("amber", "Extreme body weight: aminoglycosides dose on ideal/adjusted body weight (needs height) — calculate per protocol and use TDM.");
+        if (/vancomycin/.test(n)) add("blue", "Label text names a 20–25 mg/kg loading description and maintenance by AUC or drug monitoring. The entered weight is not multiplied into a milligram amount.");
+        if ((ptKg >= 100 || ptKg < 50) && /(gentamicin|tobramycin|amikacin)/.test(n)) add("amber", "The entered weight is outside 50–100 kg. This sandbox does not calculate an aminoglycoside amount.");
       }
       f.push(...AMUApp.additionalPatientFlags(d));
       return f;
@@ -4519,7 +4510,7 @@
         const r = e.rates?.[reg];
         if (!Number.isFinite(r) || r < 0 || r > 100) return;
         const hi = r >= (settings.highThreshold ?? 25), mid = r >= (settings.mediumThreshold ?? 10);
-        out.push({ l: hi ? "red" : mid ? "amber" : "emerald", t: `<b>${esc(p.pathogen)}</b> vs ${esc(e.antibiotic)}: <b>${r}%</b> is an illustrative repository figure (${esc(regName)}), not an official WHO, ECDC, or CDC rate. ${hi ? "The figure is at or above this page's high threshold. That is not an instruction to avoid a drug." : mid ? "The figure is between this page's thresholds. It is not a susceptibility recommendation." : "No flag is implied by a lower illustrative figure. It is not a finding that the organism is susceptible."}` });
+        out.push({ l: hi ? "red" : mid ? "amber" : "blue", t: `${p.pathogen} vs ${e.antibiotic}: ${r}% is an illustrative repository figure (${regName}), not an official WHO, ECDC, or CDC rate. ${hi ? "The figure is at or above this page's high threshold. That is not an instruction to avoid a drug." : mid ? "The figure is between this page's thresholds. It is not a susceptibility recommendation." : "A lower illustrative figure is not a finding that the organism is susceptible."}` });
       }));
       return out;
     }
@@ -4529,7 +4520,7 @@
 
     function renderPatientBlock(d) {
       const col = { red: "bg-rose-50 border-rose-300 text-rose-950", amber: "bg-amber-50 border-amber-300 text-amber-950", emerald: "bg-emerald-50 border-emerald-300 text-emerald-950", blue: "bg-blue-50 border-blue-200 text-slate-800" };
-      const li = (x, ic) => `<li class="p-1.5 rounded border text-[11px] leading-snug ${col[x.l]}"><i class="fa-solid ${ic} mr-1"></i>${x.t}</li>`;
+      const li = (x, ic) => `<li class="p-1.5 rounded border text-[11px] leading-snug ${col[x.l]}"><i class="fa-solid ${ic} mr-1"></i>${esc(x.t)}</li>`;
       const res = resistanceLines(d).map(x => li(x, "fa-bacteria")).join("");
       const all = patientFlags(d), isB = x => (x.src === "preg" || x.src === "hep") && x.l !== "blue";
       const banners = all.filter(isB).map(bannerHtml).join("");
@@ -4543,7 +4534,7 @@
       const sub = activePathogenProfile && activePathogenProfile.diseases ? ((activePathogenProfile.diseases.find(x => x.id === activeDiseaseFilterId) || {}).label || "") : "";
       const hdr = ($id("activeDiseaseHeader").textContent + " " + sub).toLowerCase();
       const k = Object.keys(ALT_ROUTE).find(x => d.genericName.toUpperCase().includes(x));
-      if (k && !/mening|brain abscess|endocarditis/.test(hdr)) badges += `<div class="text-[10px] text-slate-600"><i class="fa-solid fa-route mr-1 text-sky-600"></i>Alternative route if primary is unavailable: <b>${ALT_ROUTE[k]}</b> <span class="text-slate-400">(only if gut absorption, site and severity allow)</span></div>`;
+      if (k && !/mening|brain abscess|endocarditis/.test(hdr)) badges += `<div class="text-[10px] text-slate-600"><i class="fa-solid fa-route mr-1 text-sky-600"></i>Index lists another route: <b>${esc(ALT_ROUTE[k])}</b> <span class="text-slate-400">(not a recommendation)</span></div>`;
       if (!res && !pf && !badges && !banners) return "";
       return `<div class="space-y-1.5">${banners}${res ? `<ul class="space-y-1">${res}</ul>` : ""}${pf ? `<ul class="space-y-1">${pf}</ul>` : ""}${badges}</div>`;
     }
@@ -4565,7 +4556,7 @@
     }
     function renderFirstLineFrame(cards, renal, meta) {
       if (!cards.length) return "";
-      return `<section data-first-line="true" class="rounded-xl border-2 border-emerald-300 bg-emerald-50/50 p-3 space-y-2"><div class="flex items-center justify-between flex-wrap gap-1"><div class="text-xs font-extrabold uppercase text-emerald-900">${esc(meta.title)} <span class="font-normal normal-case">— guideline layer</span></div><a data-treatment-choice-source="${esc(meta.source)}" href="${esc(meta.sourceUrl)}" target="_blank" rel="noopener noreferrer" class="text-[9px] font-bold rounded border border-violet-200 bg-violet-50 text-violet-900 px-2 py-0.5">${esc(meta.source)} ↗</a></div>${meta.note ? `<p class="text-[11px] text-emerald-950">${esc(meta.note)}</p>` : ""}${cards.map(d => renderDistilledDrugCard(d, renal)).join("")}</section>`;
+      return `<section data-first-line="true" class="rounded-xl border-2 border-slate-300 bg-slate-50 p-3 space-y-2"><div class="flex items-center justify-between flex-wrap gap-1"><div class="text-xs font-extrabold uppercase text-slate-800">${esc(meta.title)} <span class="font-normal normal-case">— index layer, not a regimen</span></div><a data-treatment-choice-source="${esc(meta.source)}" href="${esc(meta.sourceUrl)}" target="_blank" rel="noopener noreferrer" class="text-[9px] font-bold rounded border border-violet-200 bg-violet-50 text-violet-900 px-2 py-0.5">${esc(meta.source)} ↗</a></div>${omitRestatedDose(meta.note) ? `<p class="text-[11px] text-slate-700">${esc(omitRestatedDose(meta.note))}</p>` : ""}<p class="text-[11px] text-slate-600">The cards below are associated records. They are not a selected dose.</p>${cards.map(d => renderDistilledDrugCard(d, renal)).join("")}</section>`;
     }
     function eligibleFirstLineCard(drug, renal) {
       const hasExternalRegimen = (drug.dosingBullets || []).some(b => {
@@ -4601,20 +4592,20 @@
       if (!entry) return '';
       const knowledge=firstLineKnowledge(),pathogen=activePathogenProfile.canonical,patient=AMUApp.patient();
       if (activeDiseaseFilterId==='all') {
-        return `<div class="space-y-3 mb-3" data-first-line-overview="true"><p class="text-xs text-slate-600">First-line treatment by infection. Select a presentation to see its treatment choices and product cards.</p>${knowledge.overview(pathogen,patient).map(item=>{
+        return `<div class="space-y-3 mb-3" data-first-line-overview="true"><p class="text-xs text-slate-600">Index of presentations. Selecting one shows associated product cards and monograph text. It does not choose a regimen.</p>${knowledge.overview(pathogen,patient).map(item=>{
           const preferred=item.groups.length>0;
-          return `<section data-guidance-context="${esc(pathogen+'|'+item.id)}" ${preferred?'data-first-line="true"':''} style="border:2px solid ${preferred?'#6ee7b7':'#cbd5e1'};border-radius:12px;padding:12px" class="${preferred?'bg-emerald-50/40':'bg-slate-50'}"><button type="button" class="text-left text-sm font-extrabold underline ${preferred?'text-emerald-900':'text-slate-800'}" onclick="selectPathogenDiseaseFilter('${jsArg(item.id)}')">${esc(item.label)}</button>${item.groups.map(group=>`<div class="mt-2 text-xs"><b>${esc(group.title)}</b>${group.agents?.length?`<p>${esc(guidelineAgentNames(group))}</p>`:''}${group.qualifier?`<p class="mt-1">${esc(group.qualifier)}</p>`:''}${group.externalCompanions?.length?`<p>Required additional components: ${esc(group.externalCompanions.join('; '))}</p>`:''}${guidelineSourceLink(group)}</div>`).join('')}${!preferred?`<p class="text-xs mt-1">${esc(item.entry?.note||'Guideline review required.')}</p>`:''}</section>`;
+          return `<section data-guidance-context="${esc(pathogen+'|'+item.id)}" ${preferred?'data-first-line="true"':''} style="border:2px solid #cbd5e1;border-radius:12px;padding:12px" class="bg-slate-50"><button type="button" class="text-left text-sm font-extrabold underline text-slate-800" onclick="selectPathogenDiseaseFilter('${jsArg(item.id)}')">${esc(item.label)}</button>${item.groups.map(group=>`<div class="mt-2 text-xs"><b>${esc(group.title)}</b>${group.agents?.length?`<p>${esc(guidelineAgentNames(group))}</p>`:''}${omitRestatedDose(group.qualifier)?`<p class="mt-1">${esc(omitRestatedDose(group.qualifier))}</p>`:''}${group.externalCompanions?.length?`<p>Index also names: ${esc(group.externalCompanions.join('; '))}</p>`:''}${guidelineSourceLink(group)}</div>`).join('')}${!preferred?`<p class="text-xs mt-1">${esc(omitRestatedDose(item.entry?.note)||'No dose is stated here. Open the monograph.')}</p>`:''}</section>`;
         }).join('')}</div>`;
       }
       const plan=knowledge.plan(pathogen,activeDiseaseFilterId,patient,cards,drugMatchesCuratedAgent,d=>eligibleFirstLineCard(d,renal));
       if (!plan.groups.length) {
-        const heading=['review_required','source_index'].includes(entry.status)?'Treatment selection requires a defined clinical branch':'No single standard first-line regimen for this view';
-        return `<div data-guidance-status="${esc(entry.status)}" class="mb-3 rounded-xl border border-slate-300 bg-slate-50 p-3 text-xs"><b>${esc(heading)}</b><p>${esc(entry.note)}</p>${(entry.sourceRefs||[]).map(id=>guidelineSourceLink({source:AMUApp.database.referenceCollections.firstLineGuidance.sources[id]})).join(' · ')}</div>` + plan.remaining.map(d=>renderDistilledDrugCard(d,renal)).join('');
+        const heading=['review_required','source_index'].includes(entry.status)?'This presentation has no single associated monograph branch':'No single associated monograph branch for this view';
+        return `<div data-guidance-status="${esc(entry.status)}" class="mb-3 rounded-xl border border-slate-300 bg-slate-50 p-3 text-xs"><b>${esc(heading)}</b><p>${esc(omitRestatedDose(entry.note)||'This sandbox does not state a dose. Open the monograph.')}</p>${(entry.sourceRefs||[]).map(id=>guidelineSourceLink({source:AMUApp.database.referenceCollections.firstLineGuidance.sources[id]})).join(' · ')}</div>` + plan.remaining.map(d=>renderDistilledDrugCard(d,renal)).join('');
       }
       return plan.groups.map(group=>{
-        const type=group.kind==='combination'?'Combination — required components':group.kind==='sequence'?'Sequential treatment — complete all stages':group.kind==='procedure'?'Primary management':'Options — choose an appropriate agent';
-        const missing=group.missing.length&&!group.choiceOnly?`<p data-missing-first-line-products="true" class="text-xs text-amber-900">No eligible retrieved product card is shown for: ${esc(group.missing.join(', '))}. The guideline choice remains listed; its dose and suitability require review.${['combination','sequence'].includes(group.kind)?' A displayed component alone is not the complete regimen.':''}</p>`:'';
-        return `<section data-first-line="true" data-first-line-group="${esc(group.id)}" data-guidance-context="${esc(pathogen+'|'+activeDiseaseFilterId)}" style="border:2px solid #6ee7b7;border-radius:12px;padding:12px" class="mb-3 bg-emerald-50/40 space-y-2"><div class="text-sm font-extrabold text-emerald-900">First-line · ${esc(group.title)}</div><div class="text-[11px] font-semibold text-emerald-900">${esc(type)}${group.conditional?' · Conditions apply':''}</div>${group.agents?.length?`<p class="text-xs font-semibold">${esc(guidelineAgentNames(group))}</p>`:''}${group.qualifier?`<p class="text-xs text-emerald-950">${esc(group.qualifier)}</p>`:''}<div class="text-[11px]">${guidelineSourceLink(group)}</div>${group.externalCompanions?.length?`<p class="text-xs font-semibold">Required additional components: ${esc(group.externalCompanions.join('; '))}</p>`:''}${missing}${group.shared.length?`<p class="text-xs">Shared component card shown in another first-line group: ${esc(group.shared.join(', '))}.</p>`:''}${group.members.map(d=>renderDistilledDrugCard(d,renal)).join('')}</section>`;
+        const type=group.kind==='combination'?'Index lists these names together':group.kind==='sequence'?'Index lists these stages together':group.kind==='procedure'?'Index note':'Associated names — not a recommendation';
+        const missing=group.missing.length&&!group.choiceOnly?`<p data-missing-first-line-products="true" class="text-xs text-slate-700">No product card was retrieved for: ${esc(group.missing.join(', '))}. The index name stays listed. Open the monograph.</p>`:'';
+        return `<section data-first-line="true" data-first-line-group="${esc(group.id)}" data-guidance-context="${esc(pathogen+'|'+activeDiseaseFilterId)}" style="border:2px solid #cbd5e1;border-radius:12px;padding:12px" class="mb-3 bg-slate-50 space-y-2"><div class="text-sm font-extrabold text-slate-800">Associated text · ${esc(group.title)}</div><div class="text-[11px] font-semibold text-slate-700">${esc(type)}${group.conditional?' · The source names conditions':''}</div>${group.agents?.length?`<p class="text-xs font-semibold">${esc(guidelineAgentNames(group))}</p>`:''}${omitRestatedDose(group.qualifier)?`<p class="text-xs text-slate-700">${esc(omitRestatedDose(group.qualifier))}</p>`:''}<div class="text-[11px]">${guidelineSourceLink(group)}</div>${group.externalCompanions?.length?`<p class="text-xs font-semibold">Index also names: ${esc(group.externalCompanions.join('; '))}</p>`:''}${missing}${group.shared.length?`<p class="text-xs">Also listed in another index group: ${esc(group.shared.join(', '))}.</p>`:''}${group.members.map(d=>renderDistilledDrugCard(d,renal)).join('')}</section>`;
       }).join('') + (plan.remaining.length?`<section class="space-y-2"><div class="text-xs font-bold text-slate-600">Other retrieved agents — role and source to review</div>${plan.remaining.map(d=>renderDistilledDrugCard(d,renal)).join('')}</section>`:'');
     }
     function renderTopCards(cards, renal) {
@@ -4685,17 +4676,13 @@
     }
     function updateRenalMetricStatus() {
       const p = getActiveDosingPhysiology();
-      const calculation = AMUApp.calculation?.();
-      const derived = calculation?.status === "resolved" ? calculation.result : null;
       const metric = renalMetricMode();
       const value = metric === "crcl" ? p.crcl : p.egfr;
       let status = Number.isFinite(value)
         ? `${metric === "crcl" ? "CrCl" : "eGFR"} input selected: ${Math.round(value)} ${metric === "crcl" ? "mL/min" : "mL/min/1.73 m²"}.`
         : `${metric === "crcl" ? "CrCl" : "eGFR"} input selected; no value entered.`;
       if (metric === "egfr" && Number.isFinite(p.crcl)) status += ` Entered CrCl ${Math.round(p.crcl)} mL/min remains available for CrCl-specific branches.`;
-      if (derived) status += ` Equation result ${derived.value.toFixed(2)} ${derived.unit} (${derived.label}) selects CrCl-labelled sentences only. It is not a dose, and eGFR was not converted into CrCl.`;
-      else if (AMUApp.isRenalCalculationActive?.() && !Number.isFinite(p.crcl)) status += " Complete the CrCl calculator or enter CrCl separately.";
-      else if (canAssumeNormalRenalFunction(p)) status += ` No CrCl entered. eGFR ${Math.round(p.egfr)} is within 90–130 and dialysis is off, so the ordinary-function text branch is selected. No CrCl was calculated and no dose is recommended.`;
+      if (canAssumeNormalRenalFunction(p)) status += ` No CrCl entered. eGFR ${Math.round(p.egfr)} is within 90–130 and dialysis is off, so the ordinary-function text branch is selected. No CrCl was calculated and no dose is recommended.`;
       else if (!Number.isFinite(p.crcl)) status += " CrCl-specific label sentences need a separately entered CrCl. This eGFR value does not stand in for CrCl.";
       if (p.dialysis !== "none") status += ` Dialysis mode: ${p.dialysis.toUpperCase()}; no normal-function assumption.`;
       $id("renalMetricStatus").textContent = status;
@@ -4766,7 +4753,7 @@
         <div>
           <span class="text-[10px] font-extrabold uppercase tracking-widest text-amber-300 block">Active ${preg ? "Pregnancy" : "Hepatic Impairment"} Alert</span>
           <h4 class="text-sm font-extrabold text-white mt-0.5">${red ? "Legacy reference flag" : "Legacy reference note"} — ${preg ? "pregnancy text" : "hepatic text"}</h4>
-          <p class="text-xs ${red ? "text-rose-100" : "text-amber-50"} mt-0.5">${x.t}</p>
+          <p class="text-xs ${red ? "text-rose-100" : "text-amber-50"} mt-0.5">${esc(x.t)}</p>
         </div></div>`;
     }
     function patientRing(d) {
@@ -4783,13 +4770,33 @@
       $id("activeDiseaseHeader").textContent = hit[0].toUpperCase() + " — EU-authorised agent (no FDA label)";
       $id("queryModeTag").textContent = "EU-Only Agent";
       $id("liveResultsContainer").innerHTML = `<div class="bg-white rounded-xl border-2 border-sky-300 p-5 space-y-3 text-xs text-slate-700">
-        <p><b>${hit[0]}</b> is not FDA-approved, so this app has no monograph for it and will not guess one. Use the official EU/national product information (SmPC): <a class="text-blue-600 underline" href="https://www.ema.europa.eu/en/medicines" target="_blank" rel="noopener noreferrer">EMA medicines</a> • <a class="text-blue-600 underline" href="https://www.sukl.cz" target="_blank" rel="noopener noreferrer">SÚKL (Czech Republic)</a>.</p>
-        ${hit[1].length ? `<p>Closest FDA-labelled ${hit[2]} members (similar class, <b>not</b> interchangeable doses):</p><div class="flex flex-wrap gap-1.5">${hit[1].map(a => `<button onclick="executeUntangleSearch('${a}', true)" class="px-2.5 py-1 rounded bg-white hover:bg-emerald-600 hover:text-white text-emerald-800 border border-emerald-300 font-semibold text-[11px]">${a}</button>`).join("")}</div>` : `<p>No FDA-labelled agent is a true equivalent.</p>`}</div>`;
+        <p><b>${esc(hit[0])}</b> is not FDA-approved, so this app has no monograph for it and will not guess one. Official EU and national product information is published by <a class="text-blue-600 underline" href="https://www.ema.europa.eu/en/medicines" target="_blank" rel="noopener noreferrer">EMA medicines</a> and <a class="text-blue-600 underline" href="https://www.sukl.cz" target="_blank" rel="noopener noreferrer">SÚKL (Czech Republic)</a>.</p>
+        ${hit[1].length ? `<p>FDA-labelled ${esc(hit[2])} names in a similar class. They are not interchangeable amounts:</p><div class="flex flex-wrap gap-1.5">${hit[1].map(a => `<button onclick="executeUntangleSearch('${jsArg(a)}', true)" class="px-2.5 py-1 rounded bg-white hover:bg-sky-600 hover:text-white text-sky-800 border border-sky-300 font-semibold text-[11px]">${esc(a)}</button>`).join("")}</div>` : `<p>No FDA-labelled name is stored for this class.</p>`}</div>`;
       return true;
     }
 
     // ===== v1.5: ranking by contraindication, minimized rows, escaping helpers =====
     function esc(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
+    function omitRestatedDose(text) {
+      const value = String(text || "");
+      if (/\d+(?:\.\d+)?\s*(?:mg|g|mcg|units)\b|\b(?:mg\/kg|high-dose|q\d+h)\b/i.test(value)) return "";
+      return value;
+    }
+    function riskBadgeText(label) {
+      const value = String(label || "");
+      if (!omitRestatedDose(value) || /\b(?:not indicated|avoid|contraindicated|doses differ)\b/i.test(value)) {
+        return "Index note. This sandbox does not restate a dose or an indication limit. Open the monograph.";
+      }
+      return value;
+    }
+    function sandboxIndexNote(label, note) {
+      const text = String(note || "");
+      const statesDose = /\d+(?:\.\d+)?\s*(?:mg|g|mcg|units)\b|\b(?:mg\/kg|high-dose|q\d+h|every\s+\d+|contraindicated|\biv\b|\bpo\b|\bim\b)\b/i.test(text);
+      if (statesDose) {
+        return `<i class="fa-solid fa-circle-info text-indigo-600 mr-1.5"></i><strong>${esc(label)} — index note:</strong> This index entry names the presentation. It does not state a dose, duration, or regimen. Read the official monograph.`;
+      }
+      return `<i class="fa-solid fa-circle-info text-indigo-600 mr-1.5"></i><strong>${esc(label)} — index note, not a prescribing instruction:</strong> ${esc(text)}`;
+    }
     function jsArg(s) { return esc(String(s == null ? "" : s).replace(/\\/g, "\\\\").replace(/'/g, "\\'")); }
 
     // score: 0 none • 0.5 dose-adjust only • 1 relative contraindication • 2 absolute contraindication

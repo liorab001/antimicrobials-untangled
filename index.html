@@ -315,7 +315,7 @@
             <label class="flex items-center gap-1 cursor-pointer"><input type="radio" name="rrtMode" value="capd" onchange="syncRenalMetric()"> Peritoneal dialysis (CAPD)</label>
           </div>
           <input type="checkbox" id="renalFlag" class="hidden">
-          <p class="text-[10px] text-slate-300 leading-snug">FDA Monograph Branch Explorer. These values are text-filter parameters: they choose which monograph sentences are shown. eGFR is entered in mL/min/1.73 m² and CrCl is entered separately in mL/min. No numeric conversion is applied, and no equation estimates creatinine clearance. A blank CrCl does not become a CrCl. eGFR 90–130 with no dialysis only selects label text that is not limited to renal impairment. Any other eGFR leaves CrCl-specific sentences unmatched. Dialysis selects only a dialysis-labelled branch. Nothing here calculates a dose. The fields start at sample values. Do not replace them with a real person's age, weight, sex, pregnancy, allergy, dialysis, or renal function.</p>
+          <p class="text-[10px] text-slate-300 leading-snug">FDA Monograph Branch Explorer. These values choose which monograph sentences are shown. eGFR is entered in mL/min/1.73 m² and CrCl is entered separately in mL/min. eGFR is not converted into CrCl. eGFR 90–130 with no dialysis selects ordinary-function label text. Outside that band, the kidney-function equation can estimate the clearance the label names and select that regimen. Dialysis uses the label’s dialysis branch. A typed CrCl takes precedence. The fields start at sample values. Do not replace them with a real person's age, weight, sex, pregnancy, allergy, dialysis, or renal function.</p>
         </div>
 
         <!-- MONOGRAPH BRANCH PARAMETERS -->
@@ -653,6 +653,6 @@
   <noscript>This prototype requires JavaScript to load the database and application.</noscript>
   <script defer src="./amu-engine.js?v=1.1.2"></script>
   <script defer src="./amu-feature-data.js"></script>
-  <script defer src="./amu-integration.js?v=20261112-roi"></script>
+  <script defer src="./amu-integration.js?v=20261113-renal"></script>
 </body>
 </html>

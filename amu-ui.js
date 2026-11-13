@@ -2123,8 +2123,9 @@
     function canAssumeNormalRenalFunction(profile) {
       const policy=AMUApp.database?.policies?.quantity?.physiologicalRenalAssumption;
       if(AMUApp.normalRenalDefaults)return AMUApp.normalRenalDefaults()&&!AMUApp.isRenalCalculationActive();
+      const upper=policy?.maximumScreenValue;
       return !AMUApp.isRenalCalculationActive?.() && AMUApp.database?.policies?.quantity?.assumeNormalRenalFunction===true && !!policy?.enabled && !Number.isFinite(profile.crcl) && Number.isFinite(profile.egfr)
-        && profile.egfr>=policy.minimumScreenValue && profile.dialysis===policy.noDialysisValue;
+        && profile.egfr>=policy.minimumScreenValue && !(Number.isFinite(upper)&&profile.egfr>upper) && profile.dialysis===policy.noDialysisValue;
     }
     function isStandardRenalBranch(sentence) {
       const s = normalizeLabelStructureText(sentence).toLowerCase();
@@ -4690,7 +4691,7 @@
 
       const rp = drug.renalProfile;
       const isRenalContra = rp.contraLevel.includes("CONTRAINDICATION") || rp.contraLevel.includes("NEUROTOXICITY") || rp.contraLevel.includes("NEPHROTOXIC");
-      if (isRenalActive && isRenalContra) visibleRenalBullets.unshift({color:"red",tag:"Renal text filter",text:"This filter matches a renal caution phrase in the index. This sandbox does not restate an amount. Open the monograph."});
+      if (isRenalActive && isRenalContra && rp.contraNote) visibleRenalBullets.unshift({color:"red",tag:"App renal screening caution",text:rp.contraNote});
 
       const showExpand1 = !!dosingSourceForDisplay && hasMeaningfulExtraText(dosingSourceForDisplay, visibleDosingBullets);
       const showExpand2 = hasMeaningfulExtraText(drug.rawInteractions, drug.interactionBullets);
@@ -4926,17 +4927,18 @@
       }
       cur = "renal";
       const mode = rrtMode();
+      const effectiveCrCl = Number.isFinite(crcl) ? crcl : AMUApp.patient?.().crcl;
       if (mode === "crrt") {
-        add("amber", "CRRT is selected. This sandbox does not restate a CRRT amount. Open the monograph.");
+        add("amber", "CRRT: clearance differs from eGFR <30 — do NOT apply the <30 reductions (risk of underdosing). " + (/(meropenem|piperacillin|vancomycin|cefepime|ceftazidime)/.test(n) ? "Commonly needs higher doses than <30 schedules; dose with CRRT-specific references and TDM." : "Dose with CRRT-specific references/pharmacy and TDM where available."));
       } else if (mode === "hd") {
         const hk = Object.keys(HD_NOTE).find(x => U.includes(x));
-        if (hk) add("amber", "Intermittent hemodialysis is selected. This sandbox does not restate a dialysis amount. Open the monograph.");
-      } else if (Number.isFinite(crcl)) {
+        if (hk) add("amber", "Intermittent HD: " + HD_NOTE[hk]);
+      } else if (Number.isFinite(effectiveCrCl)) {
         const k = Object.keys(RENAL_MOD).find(x => U.includes(x));
-        if (k && crcl <= RENAL_MOD[k][2]) add("amber", `CrCl ${Math.round(crcl)} mL/min is the sample filter. The label has a renal branch for this filter. This sandbox does not restate an amount. Open the monograph.`);
+        if (k && effectiveCrCl <= RENAL_MOD[k][2]) add(RENAL_MOD[k][0], `CrCl ${Math.round(effectiveCrCl)} mL/min: ` + RENAL_MOD[k][1]);
       }
       if (Number.isFinite(egfr) && egfr > 130 && /(cillin|cef|penem|aztreonam|vancomycin|gentamicin|amikacin|tobramycin)/.test(n)) {
-        add("amber", "eGFR above 130 is selected. This sandbox does not restate an infusion or an amount. Open the monograph.");
+        add("amber", "Augmented renal clearance (eGFR >130): risk of subtherapeutic levels — consider extended/continuous infusion or more frequent dosing for time-dependent agents, with TDM.");
       }
       cur = "wt";
       if (A >= 18) {
@@ -5138,14 +5140,18 @@
     }
     function updateRenalMetricStatus() {
       const p = getActiveDosingPhysiology();
+      const calculation = AMUApp.calculation?.();
+      const derived = calculation?.status === "resolved" ? calculation.result : null;
       const metric = renalMetricMode();
       const value = metric === "crcl" ? p.crcl : p.egfr;
       let status = Number.isFinite(value)
         ? `${metric === "crcl" ? "CrCl" : "eGFR"} input selected: ${Math.round(value)} ${metric === "crcl" ? "mL/min" : "mL/min/1.73 m²"}.`
         : `${metric === "crcl" ? "CrCl" : "eGFR"} input selected; no value entered.`;
       if (metric === "egfr" && Number.isFinite(p.crcl)) status += ` Entered CrCl ${Math.round(p.crcl)} mL/min remains available for CrCl-specific branches.`;
-      if (canAssumeNormalRenalFunction(p)) status += ` No CrCl entered. eGFR ${Math.round(p.egfr)} is within 90–130 and dialysis is off, so the ordinary-function text branch is selected. No CrCl was calculated and no dose is recommended.`;
-      else if (!Number.isFinite(p.crcl)) status += " CrCl-specific label sentences need a separately entered CrCl. This eGFR value does not stand in for CrCl.";
+      if (derived) status += ` Equation result ${derived.value.toFixed(2)} ${derived.unit} (${derived.label}) selects the label regimen for this kidney function. eGFR was not converted into CrCl.`;
+      else if (AMUApp.isRenalCalculationActive?.() && !Number.isFinite(p.crcl) && !Number.isFinite(AMUApp.patient?.()[calculation?.result?.field || "crcl"])) status += " Complete the clearance calculator, or enter CrCl separately, so the labelled renal regimen can be selected.";
+      else if (canAssumeNormalRenalFunction(p)) status += ` No CrCl entered. eGFR ${Math.round(p.egfr)} is within 90–130 and dialysis is off, so the ordinary-function text branch is selected. No CrCl was calculated.`;
+      else if (!Number.isFinite(p.crcl)) status += " CrCl-specific label sentences need a measured CrCl or the kidney-function equation. This eGFR value does not stand in for CrCl.";
       if (p.dialysis !== "none") status += ` Dialysis mode: ${p.dialysis.toUpperCase()}; no normal-function assumption.`;
       $id("renalMetricStatus").textContent = status;
     }

@@ -112,7 +112,7 @@
   let overrides = Object.create(null), fieldErrors = new Map(), analyses = new Map(), jobs = [], activeJobs = 0, renderFrame = 0;
   const sourceIds = new WeakMap(), sourceLabels = new WeakMap();
   let nextSourceId = 0;
-  let calculationState = {key:null,status:'inactive',result:null}, calculationJob = 0;
+  let calculationState = {key:null,status:'inactive',result:null}, calculationJob = 0, openedCalculationKey = null;
   const calculationSources = new Map();
   let automaticDemand={scope:null,required:[],renalFields:[]};
   let liveSnapshot=null, drainTimer=null;
@@ -212,7 +212,7 @@
       cancelRunning();previousEngine?.cancelAnalyses();engine=next; generation++; analyses.clear(); jobs=[]; overrides=Object.create(null); fieldErrors.clear();
       calculationJob++; calculationState={key:null,status:'inactive',result:null};automaticDemand={scope:null,required:[],renalFields:[]};
       if (!modulesLoaded) {
-        await loadScript('./amu-ui.js?v=20261113-renal-text');
+        await loadScript('./amu-ui.js?v=20261113-renal-stable');
         await loadScript('./amu-resistance.js?v=20261112-merged');
         modulesLoaded=true;
         root.AMU_legacyDebugRegimens=root.AMU_debugRegimens;
@@ -263,7 +263,9 @@
   }
   function calculationScope() {
     if(renderState?.scope)return renderState.scope;
-    const scope=JSON.stringify([generation,context(),(typeof currentFetchedDrugs==='undefined'?[]:currentFetchedDrugs).map(drug=>[drug.id,drug.labelProvenance?.labelId,drug.labelProvenance?.effectiveTime])]);
+    // Cards arrive one at a time. The scope is the filter context, not that growing
+    // list, so a new card does not discard finished matches or flap the equation panel.
+    const scope=JSON.stringify([generation,context()]);
     if(renderState)renderState.scope=scope;
     return scope;
   }
@@ -303,7 +305,6 @@
   function patient() {
     const values={...basePatient()},def=activeCalculation(values),result=calculationState.result;
     if(def&&result?.status==='resolved'&&calculationState.key===calculationKey(def,values)&&values[def.output.field]==null)values[def.output.field]=result.value;
-    if(def&&values[def.output.field]==null)values[def.activation.field]=def.activation.value;
     return values;
   }
   function calculation() {
@@ -313,7 +314,9 @@
   function renderCalculationStatus() {
     const node=byId('amuRenalCalculationStatus');if(!node)return;
     const state=calculation(),result=state.result,defs=engine.database.fieldDefinitions;
-    const details=byId('amuRenalCalculator');if(details)details.open=state.status!=='inactive'&&state.status!=='provided';
+    const details=byId('amuRenalCalculator');
+    if(state.status==='inactive'||state.status==='provided')openedCalculationKey=null;
+    else if(details&&state.status==='needs_inputs'&&openedCalculationKey!==calculationState.key){openedCalculationKey=calculationState.key;details.open=true;}
     if(state.status==='inactive'){node.textContent='Equations run when kidney function is outside the ordinary band, or when a selected source needs a missing clearance and creatinine is supplied. Existing filter values are reused; no patient values are saved.';return;}
     if(state.status==='provided'){node.textContent='Entered CrCl takes precedence; the estimator is not used.';return;}
     if(state.status==='pending'){node.textContent='Checking equation inputs and source…';return;}
@@ -485,7 +488,7 @@
   function queueAnalysis(drugs) {
     if (!engine) return;
     document.querySelectorAll?.('input,select,textarea').forEach(control=>control.setAttribute('autocomplete','off'));
-    const snapshot=JSON.stringify([basePatient(),context(),calculationScope(),getAllergyState()]);
+    const snapshot=JSON.stringify([generation,basePatient(),context(),getAllergyState()]);
     if(snapshot!==liveSnapshot){cancelRunning();liveSnapshot=snapshot;analyses.clear();jobs=[];}
     ensureCalculation();
     const wanted=new Set(),allergy=getAllergyState();
@@ -745,7 +748,7 @@
   function eraseTransientPatientState() {
     cancelRunning();calculationAbort?.abort();engine?.clearTransientState();renderState=null;
     document.querySelectorAll?.('[data-amu-analysis-content]').forEach(node=>node.replaceChildren());
-    generation++;calculationJob++;liveSnapshot=null;overrides=Object.create(null);fieldErrors.clear();analyses.clear();jobs=[];automaticDemand={scope:null,required:[],renalFields:[]};calculationState={key:null,status:'inactive',result:null};
+    generation++;calculationJob++;openedCalculationKey=null;liveSnapshot=null;overrides=Object.create(null);fieldErrors.clear();analyses.clear();jobs=[];automaticDemand={scope:null,required:[],renalFields:[]};calculationState={key:null,status:'inactive',result:null};
     if(typeof ptAge!=='undefined')ptAge=40;if(typeof ptKg!=='undefined')ptKg=70;if(typeof egfr!=='undefined')egfr=100;if(typeof crcl!=='undefined')crcl=null;if(typeof ptGaWeeks!=='undefined')ptGaWeeks=null;if(typeof ptPnaDays!=='undefined')ptPnaDays=null;
     document.querySelectorAll?.('input,select,textarea').forEach(control=>{control.setAttribute('autocomplete','off');if(control.type==='checkbox'||control.type==='radio')control.checked=control.defaultChecked||false;else if(control.type==='range')control.value=control.getAttribute('value')||control.min||'0';else if(control.tagName==='SELECT')control.selectedIndex=0;else if(control.type!=='file')control.value='';});
   }

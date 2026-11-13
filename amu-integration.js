@@ -212,7 +212,7 @@
       cancelRunning();previousEngine?.cancelAnalyses();engine=next; generation++; analyses.clear(); jobs=[]; overrides=Object.create(null); fieldErrors.clear();
       calculationJob++; calculationState={key:null,status:'inactive',result:null};automaticDemand={scope:null,required:[],renalFields:[]};
       if (!modulesLoaded) {
-        await loadScript('./amu-ui.js?v=20261112-label-fetch');
+        await loadScript('./amu-ui.js?v=20261113-renal');
         await loadScript('./amu-resistance.js?v=20261112-merged');
         modulesLoaded=true;
         root.AMU_legacyDebugRegimens=root.AMU_debugRegimens;
@@ -267,9 +267,13 @@
     if(renderState)renderState.scope=scope;
     return scope;
   }
+  function ordinaryRenalScreen(policy,value) {
+    const upper=policy?.maximumScreenValue;
+    return Number.isFinite(value)&&value>=policy.minimumScreenValue&&!(Number.isFinite(upper)&&value>upper);
+  }
   function normalRenalDefaults(values=basePatient()) {
     const policy=engine?.database.policies.quantity?.physiologicalRenalAssumption;
-    return !!policy?.enabled&&engine.database.policies.quantity.assumeNormalRenalFunction===true&&Number.isFinite(values[policy.screenField])&&values[policy.screenField]>=policy.minimumScreenValue&&values[policy.noDialysisField]===policy.noDialysisValue&&!Object.entries(policy.normalMinimums||{}).some(([field,minimum])=>Number.isFinite(values[field])&&values[field]<minimum);
+    return !!policy?.enabled&&engine.database.policies.quantity.assumeNormalRenalFunction===true&&ordinaryRenalScreen(policy,values[policy.screenField])&&values[policy.noDialysisField]===policy.noDialysisValue&&!Object.entries(policy.normalMinimums||{}).some(([field,minimum])=>Number.isFinite(values[field])&&(values[field]<minimum||Number.isFinite(policy.maximumScreenValue)&&values[field]>policy.maximumScreenValue));
   }
   function updateCalculationDemand() {
     const scope=calculationScope(),required=new Set(),renalFields=new Set();
@@ -279,7 +283,18 @@
     }
     automaticDemand={scope,required:[...required],renalFields:[...renalFields]};
   }
-  function activeCalculation() {
+  function activeCalculation(values=basePatient()) {
+    const policy=engine?.database.policies.sourceCalculations;
+    if(!policy?.enabled||!policy.automatic?.enabled||automaticDemand.scope!==calculationScope())return null;
+    const wanted=new Set(automaticDemand.required);
+    if(values.serum_creatinine!=null)for(const field of automaticDemand.renalFields)wanted.add(field);
+    for(const definition of policy.definitions||[]){
+      if(!wanted.has(definition.output.field)||!definition.automaticEligibility)continue;
+      if(normalRenalDefaults(values)&&values.serum_creatinine==null&&values[definition.output.field]==null)continue;
+      if(ruleCondition(definition.automaticEligibility,values)!==true)continue;
+      if(definition.automaticDrugNames?.length&&!(typeof currentFetchedDrugs==='undefined'?[]:currentFetchedDrugs).some(drug=>definition.automaticDrugNames.some(name=>typeof drugMatchesCuratedAgent==='function'&&drugMatchesCuratedAgent(drug,name))))continue;
+      return definition;
+    }
     return null;
   }
   function calculationKey(def,values) {
@@ -297,13 +312,15 @@
   }
   function renderCalculationStatus() {
     const node=byId('amuRenalCalculationStatus');if(!node)return;
-    const state=calculation(),result=state.result;
-    if(state.status==='inactive'){node.textContent='This sandbox does not estimate creatinine clearance and does not calculate a dose. Use the sample renal text filter. Do not enter a real person\'s measurements.';return;}
-    if(state.status==='provided'){node.textContent='A CrCl typed in the text filter is used only to choose label sentences. No clearance is estimated.';return;}
-    if(state.status==='pending'){node.textContent='Checking filter inputs…';return;}
-    if(state.status==='needs_inputs'){node.textContent='More sample filters would be needed to match a label sentence. This sandbox does not calculate a dose.';return;}
-    if(state.status!=='resolved'){node.textContent=result?.message||'No clearance is estimated. Enter a sample CrCl in the text filter if you want to match sentences that name CrCl.';return;}
-    node.textContent='A calculated clearance is not shown. Matched text, if any, is a label sentence and not a dose.';
+    const state=calculation(),result=state.result,defs=engine.database.fieldDefinitions;
+    const details=byId('amuRenalCalculator');if(details)details.open=state.status!=='inactive'&&state.status!=='provided';
+    if(state.status==='inactive'){node.textContent='Equations run when kidney function is outside the ordinary band, or when a selected source needs a missing clearance and creatinine is supplied. Existing filter values are reused; no patient values are saved.';return;}
+    if(state.status==='provided'){node.textContent='Entered CrCl takes precedence; the estimator is not used.';return;}
+    if(state.status==='pending'){node.textContent='Checking equation inputs and source…';return;}
+    if(state.status==='needs_inputs'){node.textContent=(activeCalculation()?.label||'Source equation')+' requires: '+(result.missingFields||[]).map(name=>defs[name]?.label||name).join(', ')+'. Complete those filters to select the renal regimen.';return;}
+    if(state.status!=='resolved'){node.textContent=result?.message||'No verified equation is available for these inputs. Enter CrCl separately.';return;}
+    const url=result.sourceIdentity?.sourceUrl||'';
+    node.innerHTML='<strong>Estimated '+escape(defs[result.field]?.label||result.field)+': '+escape(result.value.toFixed(2))+' '+escape(result.unit)+'</strong> · '+escape(result.label)+'<details class="mt-1"><summary class="cursor-pointer underline">Equation, inputs and source</summary><p class="mt-1">'+escape(result.equation)+'</p><p>'+escape(Object.entries(result.inputs).map(([name,value])=>name+': '+value).join(' · '))+'</p><p>The full-precision estimate selects the label row for this kidney function. Display rounding does not change the selection.</p>'+(url?'<a href="'+escape(url)+'" target="_blank" rel="noopener noreferrer" class="text-blue-700 underline">FDA equation source ↗</a>':'')+'</details>';
   }
   async function calculationSource(def) {
     const reference=def.source?.referenceUrl;
@@ -361,10 +378,14 @@
     const panel=byId('amuFieldControls'); panel.replaceChildren();
     const defs=engine.database.fieldDefinitions;
     byId('amuRenalCalculator')?.remove();
+    let calculationPanel=null;
     if(Object.values(defs).some(def=>def.ui?.group==='renal_calculation')){
-      const note=document.createElement('div');note.id='amuRenalCalculator';note.className='p-2 rounded-lg bg-white text-slate-800 border border-purple-300 text-[11px]';
-      note.textContent='Clearance equations are not used. This sandbox does not estimate creatinine clearance from age, weight, or serum creatinine, and it does not select a regimen from an equation. Use the sample renal text filter above. Leave age 40 years and weight 70 kg in place. Do not enter a real person\'s measurements.';
-      byId('renalMetricStatus').insertAdjacentElement('afterend',note);
+      const details=document.createElement('details');details.id='amuRenalCalculator';details.className='p-2 rounded-lg bg-white text-slate-800 border border-purple-300 text-[11px]';
+      const summary=document.createElement('summary');summary.className='cursor-pointer font-bold text-purple-900';summary.textContent='Kidney-function equation for a special clearance branch';
+      const note=document.createElement('p');note.className='mt-2';note.textContent='Used when kidney function is outside the ordinary band, or when creatinine is supplied for a source that names a clearance. Age and weight come from the branch parameters above. The result selects the label sentence for that clearance. It does not convert eGFR into CrCl, and a CrCl typed in the renal text filter takes precedence. Values stay in this page only.';
+      calculationPanel=document.createElement('div');calculationPanel.className='grid grid-cols-1 gap-2 mt-2';
+      const status=document.createElement('div');status.id='amuRenalCalculationStatus';status.className='mt-2 leading-relaxed';status.setAttribute('role','status');
+      details.append(summary,note,calculationPanel,status);byId('renalMetricStatus').insertAdjacentElement('afterend',details);
     }
     byId('amuFieldCount').textContent='('+Object.keys(defs).length+')';
     const indicationBox=document.createElement('label');
@@ -373,7 +394,7 @@
     const indication=document.createElement('input'); indication.id='amuContextIndication'; indication.type='text'; indication.placeholder='Uses the selected presentation when blank'; indication.className='block w-full border rounded p-1.5 mt-1';
     indication.addEventListener('change',changed); indicationBox.append(title,indication); panel.append(indicationBox);
     for (const [name,def] of Object.entries(defs)) {
-      if(name==='renal_estimation_method'||def.ui?.group==='renal_calculation')continue;
+      if(name==='renal_estimation_method')continue;
       const box=document.createElement('div'); box.className='p-2 border rounded bg-slate-50';
       const label=document.createElement('label'); label.textContent=(def.label || name)+(def.unit ? ' ('+def.unit+')' : '');
       const control=(def.type==='enum' || def.type==='boolean') ? document.createElement('select') : (['number','integer','string'].includes(def.type) ? document.createElement('input') : document.createElement('textarea'));
@@ -417,7 +438,7 @@
         });
         toggleLabel.append(toggle,document.createTextNode(' Override page value (empty = unknown)')); box.append(toggleLabel);
       }
-      panel.append(box);
+      (def.ui?.group==='renal_calculation'&&calculationPanel?calculationPanel:panel).append(box);
     }
     renderCalculationStatus();
   }
@@ -526,7 +547,7 @@
     const result=entry.result,bullets=[],definitions=engine.database.fieldDefinitions,groups=new Map();
     const fieldLabel=name=>definitions[name]?.label || name;
     const activeContext=context(),values=patient(),policy=engine.database.policies.quantity?.physiologicalRenalAssumption;
-    const needsMeasuredRenal=policy&&values[policy.missingField]==null&&Number.isFinite(values[policy.screenField])&&values[policy.screenField]<policy.minimumScreenValue;
+    const needsMeasuredRenal=policy&&values[policy.missingField]==null&&Number.isFinite(values[policy.screenField])&&!ordinaryRenalScreen(policy,values[policy.screenField]);
     const physiologicalDefault=normalRenalDefaults(values)&&!activeCalculation();
     const normalized=value=>String(value||'').toLowerCase().replace(/\s+/g,' ').trim();
     function append(record,index,pending){
@@ -569,7 +590,7 @@
         return;
       }
       const phenotypeReference=assumptions.some(item=>item.type==='label_phenotype_reference'),referenceSource=record.sourceIdentity?.status==='reference';
-      const bullet={color:pending?'amber':'blue',tag:normal?'Label sentence — a renal-filter sentence also matched':pending?'Label sentence — '+missing.map(fieldLabel).join(', ')+' not entered':referenceSource?'Label sentence — ordinary renal text':phenotypeReference?'Label sentence — susceptibility text not supplied':assumed?'Label sentence — ordinary renal text':'Label sentence',text:text+(phenotypeReference?' · Isolate susceptibility not supplied; labelled phenotype/site reference only.':''),evidence,superseded:normal,labelProvenance:record.sourceIdentity||drug.labelProvenance,engineSource:engine.getSourceBadge(record)};
+      const bullet={color:pending?'amber':'blue',tag:normal?'Normal dose — replaced by renal regimen':pending?'Source option — '+missing.map(fieldLabel).join(', ')+' needed':referenceSource?'Guideline reference — normal renal function':phenotypeReference?'Label dose — AST not supplied':assumed?'Dose — physiological renal function assumed':'Dose',text:text+(phenotypeReference?' · Isolate susceptibility not supplied; labelled phenotype/site reference only.':''),evidence,superseded:normal,labelProvenance:record.sourceIdentity||drug.labelProvenance,engineSource:engine.getSourceBadge(record)};
       groups.set(key,bullet);bullets.push(bullet);
     }
     (normal?result.normalRegimens||[]:result.regimens||[]).forEach((record,index)=>append(record,index,false));
@@ -580,14 +601,14 @@
       const missing=sourceMissing.filter(name=>!(physiologicalDefault&&(policy.fields||['crcl']).includes(name)));
       const timedOut=(result.diagnostics || []).some(d=>['ANALYSIS_TIMEOUT','REGEX_DEADLINE','WORKER_START_TIMEOUT'].includes(d.code));
       const derived=calculation(),equation=activeCalculation();
-      if(equation&&derived.status==='needs_inputs'&&sourceMissing.includes(equation.output.field))return notice('More filters needed','This sandbox does not estimate a clearance or calculate a dose.');
+      if(equation&&derived.status==='needs_inputs'&&sourceMissing.includes(equation.output.field))return notice('Equation inputs needed','To select the renal regimen, complete '+(derived.result.missingFields||[]).map(fieldLabel).join(', ')+' for '+equation.label+'. Existing age and weight filters are reused.');
       if(equation&&derived.status==='unavailable'&&sourceMissing.includes(equation.output.field))return notice('Equation not applicable',derived.result?.message||'Enter a compatible measured '+fieldLabel(equation.output.field)+'.');
       const metricNeeded=needsMeasuredRenal&&missing.includes(policy.missingField);
       if(physiologicalDefault&&sourceMissing.some(name=>(policy.fields||['crcl']).includes(name))&&!missing.length&&!timedOut)return notice('Source matching incomplete','Physiological renal function is assumed. No complete normal-function regimen matched these filters; review the source structure and applicable indication.');
       if(!timedOut&&!missing.length&&result.excluded?.some(item=>item.reason==='ACTIVE_ALLERGY_FILTER'))return notice('Blocked by allergy filters','The selected product is blocked by the current allergy filters.');
       if(!timedOut&&!missing.length&&result.roi?.status==='context_not_found')return notice('No source region for this context','No dosing region establishes the selected disease and organism. Review the label ROI details below.');
       if(!timedOut&&!missing.length&&result.roi?.status==='unsupported_pattern')return notice('Label pattern needs review','A relevant source region was found, but no complete applicable regimen was extracted. Open Label ROI and patterns below to inspect or download the unmatched pattern.');
-      return notice(timedOut?'Label matching timed out':metricNeeded?'CrCl text filter empty':'No matching label sentence',timedOut?'This label could not be matched within the processing deadline. Change a filter or reload the database to retry.':metricNeeded?'eGFR is below '+policy.minimumScreenValue+'. CrCl-specific sentences need a separately entered sample CrCl. No clearance is estimated.':missing.length?'Enter '+missing.map(fieldLabel).join(', ')+' to match the applicable label sentence.':'No complete label sentence matched these filters. The full label and interpreter details are available for review.');
+      return notice(timedOut?'Label matching timed out':metricNeeded?'CrCl required':'No matching label regimen',timedOut?'This label could not be matched within the processing deadline. Change a filter or reload the database to retry.':metricNeeded?'eGFR is outside the ordinary renal band. A measured CrCl or an eligible source equation is required before a renal regimen can be selected.':derived.status!=='inactive'&&derived.status!=='provided'&&derived.status!=='resolved'?'Complete the kidney-function calculator or enter CrCl to select this label’s renal dose.':missing.length?'Enter '+missing.map(fieldLabel).join(', ')+' to match the applicable source branch.':'No complete source dose matched these filters. The full label and interpreter details are available for review.');
     }
     return bullets;
   }
@@ -606,7 +627,7 @@
       const band=range?.lowerUnbounded?(range.upperInclusive?'≤':'<')+range.upper:range?.upperUnbounded?(range.lowerInclusive?'≥':'>')+range.lower:range.lower+'–'+range.upper;
       return escape(fields[metric.field]?.label||metric.field)+': '+escape(Number(metric.value.toFixed(2)))+' '+escape(metric.unit)+' · matched label band '+escape(band)+' '+escape(metric.unit);
     });
-    return '<section data-renal-adjustment="matched" class="rounded-xl border border-slate-300 bg-slate-50 text-slate-800 p-4 space-y-2"><div class="font-extrabold text-sm">Label sentence matched by the renal text filter</div><p class="text-[11px]">'+metrics.join('<br>')+'</p><p class="text-[11px]">This is the sentence that matched the sample filter. It is not a calculated dose'+(derived?' and no estimated clearance is shown':'')+'.</p><ul class="space-y-2">'+view.bullets.map(b=>renderBulletItem({...b,tag:'Matched label text'},false,true)).join('')+'</ul></section>';
+    return '<section data-renal-adjustment="matched" class="renal-vibrant-box text-white p-4 rounded-xl border border-white/20 space-y-2"><div class="font-extrabold text-sm">Renal-adjusted label regimen</div><p class="text-[11px]">'+metrics.join('<br>')+(derived?' · estimated with '+escape(derived.label):'')+'</p><ul class="space-y-2">'+view.bullets.map(b=>renderBulletItem({...b,tag:'Adjusted dose'},false,true)).join('')+'</ul>'+(derived?'<details class="text-[11px]"><summary class="cursor-pointer underline">Clearance calculation</summary><p class="mt-1">'+escape(derived.equation)+'</p><p>'+escape(Object.entries(derived.inputs).map(([name,value])=>name+': '+value).join(' · '))+'</p>'+(derived.sourceIdentity?.sourceUrl?'<a href="'+escape(derived.sourceIdentity.sourceUrl)+'" target="_blank" rel="noopener noreferrer" class="underline">FDA equation source ↗</a>':'')+'</details>':'')+'</section>';
   }
   function renderAnalysisDetails(drug) {
     const entry=entryFor(drug);

@@ -47,7 +47,7 @@ node tools/import-roi-patterns.cjs amu-database.json drug-queue.json amu-databas
 { "reportType": "amu-roi-drug-queue/1", "drugs": [{ "name": "vancomycin", "sourceUrl": "https://dailymed.nlm.nih.gov/dailymed/" }] }
 ```
 
-`tools/collect-roi-format-structures.cjs` reads the next names from that queue, retrieves one DailyMed SPL for each, and asks the ROI selector to cross the label with a pathogen and disease named in the indication. Physiological headings stay patient axes and are attached back to that same pathogen and disease. The result is `referenceCollections.roiFormatStructures`. Each crossing keeps the structural fingerprint, the product identity, and open filter slots. A slot names one metric and leaves `bounds` null. eGFR, GFR and CrCl are not interchangeable. Unmatched shapes are imported as disabled fingerprint drafts and do not create regimens.
+`tools/collect-roi-format-structures.cjs` reads the next names from that queue, retrieves one DailyMed SPL for each, and asks the ROI selector to cross the label with a pathogen and disease named in the indication. A single-ingredient name does not use a combination label. Physiological headings stay patient axes and are attached back to that same pathogen and disease. The result is `referenceCollections.roiFormatStructures`. Each crossing keeps the structural fingerprint, the product identity, and open filter slots. A slot names one metric and leaves `bounds` null. eGFR, GFR and CrCl are not interchangeable. Unmatched shapes are imported as disabled fingerprint drafts and do not create regimens.
 
 ```sh
 node tools/collect-roi-format-structures.cjs --limit 20

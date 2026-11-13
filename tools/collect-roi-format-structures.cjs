@@ -280,7 +280,9 @@ function scoreCandidate(name, record) {
   const productType = (record.openfda && record.openfda.product_type || []).join(' ');
   if (/veterinary|animal/i.test(productType) || /veterinary/i.test(generic)) return -1;
   const remainder = parts.reduce((text, part) => text.replace(part, ' '), generic);
-  if (parts.length === 1 && /\band\b/i.test(remainder)) return -1;
+  // A single name must not inherit a combination label. Salts such as sodium
+  // stay eligible; a comma, slash, or "and" marks another active ingredient.
+  if (parts.length === 1 && /(?:\band\b|\bwith\b|\bplus\b|[,/])/.test(remainder)) return -2;
   let score = 0;
   const route = (record.openfda && record.openfda.route || []).join(' ');
   if (/human/i.test(productType)) score += 5;
@@ -301,17 +303,20 @@ function scoreCandidate(name, record) {
 }
 
 async function chooseLabel(name) {
+  let combinationOnly = false;
   for (const expression of searchExpressions(name)) {
     const url = 'https://api.fda.gov/drug/label.json?' + new URLSearchParams({ search: expression, limit: '15' });
     let body = null;
     try { body = await fetchText(url); } catch { continue; }
     if (!body) continue;
     const payload = JSON.parse(body);
-    const ranked = (payload.results || []).map(record => ({ record, score: scoreCandidate(name, record) })).filter(item => item.score >= 0);
+    const scored = (payload.results || []).map(record => ({ record, score: scoreCandidate(name, record) }));
+    if (scored.some(item => item.score === -2)) combinationOnly = true;
+    const ranked = scored.filter(item => item.score >= 0);
     ranked.sort((a, b) => b.score - a.score || String(b.record.effective_time || '').localeCompare(String(a.record.effective_time || '')));
-    if (ranked.length) return ranked[0].record;
+    if (ranked.length) return { record: ranked[0].record, combinationOnly: false };
   }
-  return null;
+  return { record: null, combinationOnly };
 }
 
 function tightenProse(xml) {
@@ -345,9 +350,12 @@ function extractSections(xml) {
 }
 
 async function loadStructuredLabel(name, summary) {
-  const chosen = await chooseLabel(name);
+  const choice = await chooseLabel(name);
+  const chosen = choice.record;
   if (!chosen || !chosen.set_id) {
-    summary.gaps.push('No human openFDA label matched ' + name + '.');
+    summary.gaps.push(choice.combinationOnly
+      ? 'Human labels for ' + name + ' are combination products. No single-ingredient label was used.'
+      : 'No human openFDA label matched ' + name + '.');
     return null;
   }
   const setId = chosen.set_id;

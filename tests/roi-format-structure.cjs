@@ -10,7 +10,7 @@ const { AMUEngine } = require('../amu-engine.js');
 const root = path.resolve(__dirname, '..');
 const database = JSON.parse(fs.readFileSync(path.join(root, 'amu-database.json'), 'utf8'));
 const collection = database.referenceCollections.roiFormatStructures;
-const queue = `
+const first = `
 Abacavir
 Acyclovir
 Adefovir
@@ -32,17 +32,49 @@ Azithromycin
 Aztreonam
 Bacitracin
 `.trim().split(/\n/);
+const second = `
+Baloxavir
+Bedaquiline
+Benznidazole
+Bictegravir
+Cabotegravir
+Caspofungin
+Cefazolin
+Cefdinir
+Cefepime
+Cefiderocol
+Cefixime
+Cefotaxime
+Cefotetan
+Cefoxitin
+Cefpodoxime
+Ceftaroline
+Ceftazidime
+Ceftazidime-avibactam
+Ceftolozane-tazobactam
+Ceftriaxone
+`.trim().split(/\n/);
+const queue = first.concat(second);
 
 assert.strictEqual(collection.reportType, 'amu-roi-format-structure/1');
 assert.strictEqual(collection.maySupplyLabelDose, false);
 assert.strictEqual(collection.mayCreateRegimen, false);
 assert.strictEqual(collection.filterSlotSchema.bounds, null);
-assert.deepStrictEqual(collection.session.completed.slice(0, 20), queue);
-assert.strictEqual(collection.session.nextDrug, 'Baloxavir');
+assert.deepStrictEqual(collection.session.completed.slice(0, 20), first);
+assert.deepStrictEqual(collection.session.completed.slice(20, 40), second);
+assert.strictEqual(collection.session.nextDrug, 'Cefuroxime');
 
 const crossings = collection.records.filter(record => record.kind === 'format_crossing');
 const coverage = collection.records.filter(record => record.kind === 'drug_coverage');
-assert.strictEqual(coverage.length, 20);
+assert.strictEqual(coverage.length, 40);
+const ceftazidime = coverage.find(record => record.drugName === 'Ceftazidime');
+const avibactam = coverage.find(record => record.drugName === 'Ceftazidime-avibactam');
+assert.strictEqual(ceftazidime.product.genericName, 'CEFTAZIDIME');
+assert.notStrictEqual(ceftazidime.product.setId, avibactam.product.setId);
+const bictegravir = coverage.find(record => record.drugName === 'Bictegravir');
+assert.strictEqual(bictegravir.product, null);
+assert.ok(bictegravir.gaps.some(gap => /combination products/i.test(gap)));
+assert.ok(!crossings.some(record => record.drugName === 'Bictegravir'));
 assert.ok(crossings.length > 0);
 assert.ok(crossings.some(record => record.drugName === 'Abacavir' && record.pathogen.canonical === 'HIV-1' && record.disease.profileId === 'hiv_1_infection'));
 assert.ok(crossings.some(record => record.drugName === 'Acyclovir' && record.disease.profileId === 'zoster' && record.diseaseBinding === 'named_in_region' && /herpes zoster/i.test(record.sourceExcerpt)));

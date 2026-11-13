@@ -74,6 +74,13 @@ function doseOf(result) {
   assert.doesNotMatch(integration, /replaced by renal regimen/);
   assert.doesNotMatch(integration, /selects the label row/);
   assert.doesNotMatch(integration, /superseded:normal/);
+  const scopeFn = grab(integration, 'calculationScope');
+  assert.match(scopeFn, /JSON\.stringify\(\[generation,context\(\)\]\)/);
+  assert.doesNotMatch(scopeFn, /currentFetchedDrugs/);
+  assert.doesNotMatch(grab(integration, 'patient'), /activation\.value/);
+  assert.match(integration, /JSON\.stringify\(\[generation,basePatient\(\),context\(\),getAllergyState\(\)\]\)/);
+  assert.match(integration, /openedCalculationKey!==calculationState\.key/);
+  assert.doesNotMatch(integration, /details\.open=state\.status/);
 
   const engine = new AMUEngine(database);
   await engine.validate();

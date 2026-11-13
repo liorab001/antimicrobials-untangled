@@ -6,10 +6,14 @@
  *   node tools/collect-roi-format-structures.cjs --limit 20
  *   node tools/collect-roi-format-structures.cjs --limit 2 --dry-run
  *
- * Each drug is one public DailyMed SPL, chosen by openFDA generic name.
+ * Each drug is one public DailyMed SPL. openFDA chooses the human product.
+ * When that index has no single-ingredient label, DailyMed is searched
+ * directly. A nested LOINC section does not replace its parent, and an
+ * unclassified section is kept when its title is Indications or Dosage.
  * The ROI interpreter selects regions only for a pathogen/disease term that
- * the label actually uses. Physiological headings that are not a second
- * disease are crossed back onto that pathogen and disease.
+ * the label actually uses. A disease keyword that contains the matched alias
+ * is kept on the profile that owns the keyword. Physiological headings that
+ * are not a second disease are crossed back onto that pathogen and disease.
  *
  * New shapes are imported as disabled fingerprint drafts. Nothing here
  * enables a draft, validates one, or stores a numeric physiological bound.
@@ -207,8 +211,20 @@ const SECTION_CODES = {
   contraindications: '34070-3',
   use_in_specific_populations: '43684-0'
 };
+const TITLE_CODES = {
+  'indications and usage': '34067-9',
+  'dosage and administration': '34068-7',
+  contraindications: '34070-3',
+  'use in specific populations': '43684-0'
+};
+// The queue name is the substance. These queries are the single-ingredient
+// name printed on the human label, not a second active ingredient.
+const LABELED_SUBSTANCE = {
+  Colistin: 'colistimethate'
+};
 const AXIS_ROLES = new Set(['renal', 'weight', 'population', 'severity', 'surface_area']);
 const MAX_TERMS = 6;
+let drugKeywords = new Set();
 const MAX_PHYSIOLOGY_TERMS = 4;
 const MAX_RECORDS = 30;
 
@@ -292,9 +308,14 @@ function scoreCandidate(name, record) {
   if (/\b(?:respiratory|inhalation|ophthalmic)\b/i.test(route)) score -= 4;
   if (canonical(remainder).length <= 12) score += 8;
   else if (!/liposom|lipid|cholestryl/i.test(remainder)) score += 3;
-  const doseLength = (record.dosage_and_administration || []).join('').length;
+  const doseText = (record.dosage_and_administration || []).join(' ');
+  const doseLength = doseText.length;
   if (doseLength < 40) score -= 6;
   else score += 3 + Math.min(doseLength / 4000, 5);
+  const numericDose = /\d+(?:\.\d+)?\s*(?:mg|g|mcg|units|iu)\b/i.test(doseText);
+  const scheduled = /\b(?:every|times|daily|hours|hour)\b/i.test(doseText);
+  if (numericDose && scheduled) score += 8;
+  else if (!numericDose) score -= 5;
   const effective = Number(record.effective_time || 0);
   if (effective) score += Math.min(effective / 100000000, 2);
   const identityText = generic + ' ' + (record.openfda && record.openfda.brand_name || []).join(' ') + ' ' + (record.indications_and_usage || []).join(' ').slice(0, 500);
@@ -304,19 +325,77 @@ function scoreCandidate(name, record) {
 
 async function chooseLabel(name) {
   let combinationOnly = false;
-  for (const expression of searchExpressions(name)) {
-    const url = 'https://api.fda.gov/drug/label.json?' + new URLSearchParams({ search: expression, limit: '15' });
+  const queries = [name];
+  if (LABELED_SUBSTANCE[name]) queries.push(LABELED_SUBSTANCE[name]);
+  for (const query of queries) {
+    for (const expression of searchExpressions(query)) {
+      const url = 'https://api.fda.gov/drug/label.json?' + new URLSearchParams({ search: expression, limit: '15' });
+      let body = null;
+      try { body = await fetchText(url); } catch { continue; }
+      if (!body) continue;
+      const payload = JSON.parse(body);
+      const scored = (payload.results || []).map(record => ({ record, score: scoreCandidate(query, record) }));
+      if (scored.some(item => item.score === -2)) combinationOnly = true;
+      const ranked = scored.filter(item => item.score >= 0);
+      ranked.sort((a, b) => b.score - a.score || String(b.record.effective_time || '').localeCompare(String(a.record.effective_time || '')));
+      if (ranked.length) return { record: ranked[0].record, combinationOnly: false, labeledAs: query === name ? null : query };
+    }
+  }
+  const daily = await chooseDailyMed(queries);
+  if (daily) return { record: daily.record, combinationOnly: false, labeledAs: daily.labeledAs, dailyMed: true };
+  return { record: null, combinationOnly, dailyMedChecked: true };
+}
+
+function splIdentity(xml, fallbackName) {
+  const generic = ([...xml.matchAll(/<genericMedicine>[\s\S]*?<name>([^<]+)<\/name>/gi)][0] || [])[1] || fallbackName;
+  const routes = [...new Set([...xml.matchAll(/<routeCode[^>]*displayName="([^"]+)"/gi)].map(match => match[1]))];
+  const forms = [...new Set([...xml.matchAll(/<formCode[^>]*displayName="([^"]+)"/gi)].map(match => match[1]))]
+    .filter(form => !/^(?:bottle|jar|vial|carton|packet)$/i.test(form));
+  const effective = ([...xml.matchAll(/<effectiveTime\s+value="(\d{8})"/gi)][0] || [])[1] || '';
+  return { generic, routes, forms, effective };
+}
+
+async function chooseDailyMed(queries) {
+  for (const query of queries) {
+    const url = 'https://dailymed.nlm.nih.gov/dailymed/services/v2/spls.json?' + new URLSearchParams({ drug_name: query, pagesize: '25' });
     let body = null;
     try { body = await fetchText(url); } catch { continue; }
     if (!body) continue;
-    const payload = JSON.parse(body);
-    const scored = (payload.results || []).map(record => ({ record, score: scoreCandidate(name, record) }));
-    if (scored.some(item => item.score === -2)) combinationOnly = true;
-    const ranked = scored.filter(item => item.score >= 0);
-    ranked.sort((a, b) => b.score - a.score || String(b.record.effective_time || '').localeCompare(String(a.record.effective_time || '')));
-    if (ranked.length) return { record: ranked[0].record, combinationOnly: false };
+    let payload = null;
+    try { payload = JSON.parse(body); } catch { continue; }
+    const wanted = canonical(query);
+    for (const item of payload.data || []) {
+      const head = String(item.title || '').split('[')[0];
+      const title = canonical(head);
+      if (!title.includes(wanted)) continue;
+      if (query.split('-').length === 1 && /\b(?:and|with|plus)\b/i.test(head)) continue;
+      if ((head.match(/,/g) || []).length >= 3) continue;
+      const splUrl = 'https://dailymed.nlm.nih.gov/dailymed/services/v2/spls/' + item.setid + '.xml';
+      let xml = null;
+      try { xml = await fetchText(splUrl); } catch { continue; }
+      if (!xml || !/human prescription drug|human otc drug/i.test(xml)) continue;
+      const sections = extractSections(xml);
+      if (!sections['34067-9'] || !sections['34068-7']) continue;
+      const identity = splIdentity(xml, query);
+      if (identity.routes.length && identity.routes.every(route => /not applicable/i.test(route))) continue;
+      return {
+        labeledAs: query === queries[0] ? null : query,
+        record: {
+          set_id: item.setid,
+          id: item.setid,
+          effective_time: identity.effective,
+          openfda: {
+            generic_name: [identity.generic],
+            brand_name: [],
+            route: identity.routes,
+            dosage_form: identity.forms,
+            product_type: [/human otc drug/i.test(xml) ? 'HUMAN OTC DRUG' : 'HUMAN PRESCRIPTION DRUG']
+          }
+        }
+      };
+    }
   }
-  return { record: null, combinationOnly };
+  return null;
 }
 
 function tightenProse(xml) {
@@ -326,8 +405,13 @@ function tightenProse(xml) {
   return String(xml || '').replace(/>([^<]+)</g, (whole, text) => '>' + text.replace(/\s+/g, ' ') + '<');
 }
 
+function sectionTitle(head) {
+  const raw = (head.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || '';
+  return canonical(raw.replace(/<[^>]+>/g, ' '));
+}
+
 function extractSections(xml) {
-  const tokens = [...xml.matchAll(/<\/?section\b[^>]*>/gi)];
+  const tokens = [...String(xml || '').matchAll(/<\/?section\b[^>]*>/gi)];
   const stack = [];
   const found = [];
   for (const token of tokens) {
@@ -337,15 +421,22 @@ function extractSections(xml) {
       found.push({ depth: stack.length, xml: xml.slice(start, token.index + token[0].length) });
     }
   }
-  const byCode = {};
+  const ranked = new Map();
   for (const section of found) {
     const inner = section.xml.slice(section.xml.indexOf('>') + 1);
     const nested = inner.search(/<section\b/i);
-    const head = nested === -1 ? inner.slice(0, 2000) : inner.slice(0, nested);
-    const code = (head.match(/<code\b[^>]*\bcode="([^"]+)"/i) || [])[1];
-    if (!code || byCode[code]) continue;
-    byCode[code] = section.xml;
+    const head = nested === -1 ? inner.slice(0, 2500) : inner.slice(0, nested);
+    const code = (head.match(/<code\b[^>]*\bcode="([^"]+)"/i) || [])[1] || '';
+    const titled = TITLE_CODES[sectionTitle(head)] || '';
+    const assigned = code && code !== '42229-5' ? code : titled;
+    if (!assigned || assigned === '42229-5') continue;
+    const current = ranked.get(assigned);
+    if (!current || section.depth < current.depth || (section.depth === current.depth && section.xml.length > current.xml.length)) {
+      ranked.set(assigned, { depth: section.depth, xml: section.xml });
+    }
   }
+  const byCode = {};
+  for (const [code, section] of ranked) byCode[code] = section.xml;
   return byCode;
 }
 
@@ -355,8 +446,13 @@ async function loadStructuredLabel(name, summary) {
   if (!chosen || !chosen.set_id) {
     summary.gaps.push(choice.combinationOnly
       ? 'Human labels for ' + name + ' are combination products. No single-ingredient label was used.'
-      : 'No human openFDA label matched ' + name + '.');
+      : choice.dailyMedChecked
+        ? 'No human dosage label matched ' + name + ' in openFDA or DailyMed.'
+        : 'No human openFDA label matched ' + name + '.');
     return null;
+  }
+  if (choice.labeledAs) {
+    summary.gaps.push('The human single-ingredient label names ' + choice.labeledAs + ', the labeled form of ' + name + '.');
   }
   const setId = chosen.set_id;
   const sourceUrl = 'https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=' + setId;
@@ -461,12 +557,42 @@ function matchDiseases(text, profile) {
   const hits = [];
   for (const disease of profile.diseases || []) {
     if (disease.id === 'all') continue;
-    const keywords = (disease.keywords || []).filter(keyword => keyword.length >= 4 && phrase(text, keyword) && !negated(text, keyword));
+    const keywords = (disease.keywords || []).filter(keyword => keyword.length >= 4 && !drugKeywords.has(canonical(keyword)) && phrase(text, keyword) && !negated(text, keyword));
     if (!keywords.length) continue;
     const keyword = keywords.sort((a, b) => canonical(b).length - canonical(a).length)[0];
     hits.push({ id: disease.id, label: disease.label, keyword });
   }
   return hits.filter(hit => !hits.some(other => canonical(other.keyword).length > canonical(hit.keyword).length && phrase(other.keyword, hit.keyword)));
+}
+
+function specificDiseaseRows(text, alias, index) {
+  const rows = [];
+  const seen = new Set();
+  for (const entry of index) {
+    for (const disease of matchDiseases(text, entry.profile)) {
+      if (!phrase(disease.keyword, alias) && !phrase(alias, disease.keyword)) continue;
+      const key = entry.profile.canonical + '|' + disease.id;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      rows.push({ profile: entry.profile, alias, disease });
+    }
+  }
+  rows.sort((a, b) => canonical(b.disease.keyword).length - canonical(a.disease.keyword).length);
+  return rows;
+}
+
+function contextRows(text, match, index) {
+  const diseases = matchDiseases(text, match.profile);
+  if (diseases.length) return diseases.map(disease => ({ profile: match.profile, alias: match.aliasUsed, disease }));
+  const specific = specificDiseaseRows(text, match.aliasUsed, index);
+  if (specific.length) return specific;
+  return [{ profile: match.profile, alias: match.aliasUsed, disease: { id: null, label: null, keyword: match.aliasUsed } }];
+}
+
+function genusMention(text) {
+  if (/\bstaphylococc(?:us|i|al)\b/i.test(text)) return { alias: 'Staphylococcus', term: 'staphylococci' };
+  if (/\bstreptococc(?:us|i|al)\b/i.test(text)) return { alias: 'Streptococcus', term: 'streptococci' };
+  return null;
 }
 
 function diseaseContexts(clauses, index) {
@@ -476,16 +602,15 @@ function diseaseContexts(clauses, index) {
     if (negativeClause(clause.text)) continue;
     for (const match of matchProfiles(clause.text, index)) {
       if (negated(clause.text, match.aliasUsed)) continue;
-      const diseases = matchDiseases(clause.text, match.profile);
-      const rows = diseases.length ? diseases : [{ id: null, label: null, keyword: match.aliasUsed }];
-      for (const disease of rows) {
+      for (const row of contextRows(clause.text, match, index)) {
+        const disease = row.disease;
         const term = disease.keyword;
-        const key = canonical(match.profile.canonical) + '|' + (disease.id || canonical(term));
+        const key = canonical(row.profile.canonical) + '|' + (disease.id || canonical(term));
         if (seen.has(key)) continue;
         seen.add(key);
         contexts.push({
           term,
-          pathogen: { canonical: match.profile.canonical, alias: match.aliasUsed, status: 'profile_matched' },
+          pathogen: { canonical: row.profile.canonical, alias: row.alias, status: 'profile_matched' },
           disease: {
             profileId: disease.id,
             label: disease.label,
@@ -495,6 +620,17 @@ function diseaseContexts(clauses, index) {
         });
       }
     }
+    if (matchProfiles(clause.text, index).some(match => !negated(clause.text, match.aliasUsed))) continue;
+    const genus = genusMention(clause.text);
+    if (!genus) continue;
+    const key = 'genus|' + genus.alias;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    contexts.push({
+      term: genus.term,
+      pathogen: { canonical: null, alias: genus.alias, status: 'genus_named_in_source' },
+      disease: { profileId: null, label: null, sourceText: clip(clause.text, 240), status: 'source_indication_only' }
+    });
   }
   contexts.sort((a, b) => canonical(b.term).length - canonical(a.term).length);
   return contexts;
@@ -524,12 +660,11 @@ function headingContexts(nodes, index, nonClinical, patterns) {
       continue;
     }
     for (const match of profiles) {
-      const diseases = matchDiseases(text, match.profile);
-      const rows = diseases.length ? diseases : [{ id: null, label: null, keyword: text }];
-      for (const disease of rows) {
+      for (const row of contextRows(text, match, index)) {
+        const disease = row.disease.id ? row.disease : { id: null, label: null, keyword: text };
         contexts.push({
           term: text,
-          pathogen: { canonical: match.profile.canonical, alias: match.aliasUsed, status: 'profile_matched' },
+          pathogen: { canonical: row.profile.canonical, alias: row.alias, status: 'profile_matched' },
           disease: {
             profileId: disease.id,
             label: disease.label,
@@ -762,6 +897,7 @@ async function collectDrug(engine, database, index, patterns, nonClinical, name)
     uniqueContexts.push(context);
   }
   contexts = uniqueContexts.sort((a, b) => ((a.pathogen.canonical ? 0 : 2) + (a.disease.profileId ? 0 : 1)) - ((b.pathogen.canonical ? 0 : 2) + (b.disease.profileId ? 0 : 1)) || canonical(b.term).length - canonical(a.term).length);
+  const genericDose = contexts.filter(context => /^(?:recommended\s+)?dosage$/.test(canonical(context.term)));
   if (contexts.length > MAX_TERMS) {
     summary.gaps.push('Used ' + MAX_TERMS + ' of ' + contexts.length + ' pathogen-disease terms from this label.');
     contexts = contexts.slice(0, MAX_TERMS);
@@ -813,6 +949,13 @@ async function collectDrug(engine, database, index, patterns, nonClinical, name)
       summary.contexts.push({ term: context.term, pathogen: null, disease: null });
       summary.gaps.push('No profiled pathogen or disease heading selected a regimen. One dosage clause was used as its own context.');
       remember(context, await analyzeTerm(engine, loaded.label, context.term, null, intentFor(context.term)), 'primary_regimen');
+    }
+  }
+  for (const item of genericDose.slice(0, 1)) {
+    const result = await analyzeTerm(engine, loaded.label, item.term, null, undefined);
+    for (const context of contexts) {
+      if (!context.pathogen.canonical && context.pathogen.status !== 'genus_named_in_source') continue;
+      remember({ ...context, term: item.term }, result, 'primary_regimen');
     }
   }
   const physiological = physiologyContexts(normalized.nodes, patterns, nonClinical);
@@ -874,6 +1017,18 @@ async function main() {
   let nonClinical = null;
   try { nonClinical = new RegExp(database.lexicons.roi.nonClinicalHeading.pattern, database.lexicons.roi.nonClinicalHeading.flags || ''); }
   catch { nonClinical = null; }
+  drugKeywords = new Set();
+  const catalog = database.referenceCollections.drugCatalog && database.referenceCollections.drugCatalog.records || [];
+  for (const record of catalog) {
+    for (const value of [record.name, ...(record.aliases || [])]) {
+      const text = canonical(value);
+      if (text.length >= 6) drugKeywords.add(text);
+    }
+  }
+  for (const name of DRUGS) {
+    const text = canonical(name);
+    if (text.length >= 6) drugKeywords.add(text);
+  }
   const existing = collectionShell(database.referenceCollections.roiFormatStructures);
   const completed = new Set(existing.session.completed || []);
   const only = arg('drugs', '');
@@ -960,3 +1115,5 @@ if (require.main === module) {
     process.exit(1);
   });
 }
+
+module.exports = { extractSections, DRUGS };

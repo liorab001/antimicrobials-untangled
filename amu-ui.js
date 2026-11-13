@@ -4247,7 +4247,7 @@
       } else if (profileSource === "legacy_matrix") {
         bullets.push({ color: "amber", tag: "Legacy app renal reference (not FDA-label-derived)", text: renalProfile.adjustedDose });
       } else if (renalProfile?.contraLevel?.includes("SAFE")) {
-        bullets.push({ color: "emerald", tag: "No Flag Detected in Parsed Text", text: renalProfile.adjustedDose });
+        bullets.push({ color: "emerald", tag: "No Flag Detected in Parsed Text", text: "Retrieved text matched a phrase about no renal dose adjustment. Open the monograph. This flag does not state that a regimen is appropriate." });
       } else {
         bullets.push({ color: "blue", tag: "Renal label review", text: extractCleanSentence(rawPop, "renal", 240) || "No specific renal adjustment was identified in the retrieved label excerpt." });
       }
@@ -4542,7 +4542,6 @@
         emerald: { dot: "bg-emerald-500", bg: "bg-emerald-50/80 border-emerald-200 text-emerald-950", tag: "bg-emerald-200/80 text-emerald-900" }
       }[b.color] || { dot: "bg-slate-400", bg: "bg-slate-50 border-slate-200", tag: "bg-slate-200 text-slate-800" };
 
-      // Only a matched, source-bound renal regimen supersedes normal dosing.
       const evidenceSource = b.engineSource ? {sourceName:b.engineSource.label} : regimenSourceDescriptor(b.regimenProvenance || b.labelProvenance, b.evidence, false);
       const evidenceTitle = evidenceSource ? `${evidenceSource.sourceName} evidence` : "Source excerpt • attribution unverified";
 
@@ -4691,7 +4690,7 @@
 
       const rp = drug.renalProfile;
       const isRenalContra = rp.contraLevel.includes("CONTRAINDICATION") || rp.contraLevel.includes("NEUROTOXICITY") || rp.contraLevel.includes("NEPHROTOXIC");
-      if (isRenalActive && isRenalContra && rp.contraNote) visibleRenalBullets.unshift({color:"red",tag:"App renal screening caution",text:rp.contraNote});
+      if (isRenalActive && isRenalContra) visibleRenalBullets.unshift({color:"red",tag:"Renal text-filter flag",text:"The screening list marks a renal caution phrase for this name while the renal filter is active. Open the monograph. This flag does not state a dose, a contraindication, or that a regimen is safe."});
 
       const showExpand1 = !!dosingSourceForDisplay && hasMeaningfulExtraText(dosingSourceForDisplay, visibleDosingBullets);
       const showExpand2 = hasMeaningfulExtraText(drug.rawInteractions, drug.interactionBullets);
@@ -4759,7 +4758,7 @@
               ${syndromeCoverageHtml}
             </div>
             <div class="flex items-center gap-1.5 self-start flex-wrap">
-              ${isRenalActive ? `<span class="text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full ${isRenalContra ? 'bg-rose-600 text-white' : 'bg-fuchsia-700 text-white'}"><i class="fa-solid fa-kidneys mr-1"></i>${renalView.adjusted && !isRenalContra ? "Renal text branch selected" : esc(renalFlagLabel(rp.contraLevel))}</span>` : ''}
+              ${isRenalActive ? `<span class="text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full ${isRenalContra ? 'bg-rose-600 text-white' : 'bg-fuchsia-700 text-white'}"><i class="fa-solid fa-kidneys mr-1"></i>${renalView.adjusted && !isRenalContra ? "Clearance-band sentence matched" : esc(renalFlagLabel(rp.contraLevel))}</span>` : ''}
               ${statusBadge}
             </div>
           </div>
@@ -4929,16 +4928,18 @@
       const mode = rrtMode();
       const effectiveCrCl = Number.isFinite(crcl) ? crcl : AMUApp.patient?.().crcl;
       if (mode === "crrt") {
-        add("amber", "CRRT: clearance differs from eGFR <30 — do NOT apply the <30 reductions (risk of underdosing). " + (/(meropenem|piperacillin|vancomycin|cefepime|ceftazidime)/.test(n) ? "Commonly needs higher doses than <30 schedules; dose with CRRT-specific references and TDM." : "Dose with CRRT-specific references/pharmacy and TDM where available."));
+        add("blue", "CRRT filter is on. Monograph sentences written for a low clearance are a different branch." + (/(meropenem|piperacillin|vancomycin|cefepime|ceftazidime)/.test(n) ? " The screening list marks this name for a separate CRRT reading." : "") + " Open the monograph. No amount is restated here.");
       } else if (mode === "hd") {
         const hk = Object.keys(HD_NOTE).find(x => U.includes(x));
-        if (hk) add("amber", "Intermittent HD: " + HD_NOTE[hk]);
+        add("blue", "Intermittent HD filter is on." + (hk ? " The screening list records that this name’s monograph has a hemodialysis sentence." : " Hemodialysis sentences in a retrieved monograph are the branch for this filter.") + " Open the monograph. No amount or timing is restated here.");
+      } else if (mode === "capd") {
+        add("blue", "Peritoneal dialysis filter is on. Dialysis sentences in a retrieved monograph are the branch for this filter. Open the monograph. No amount is restated here.");
       } else if (Number.isFinite(effectiveCrCl)) {
         const k = Object.keys(RENAL_MOD).find(x => U.includes(x));
-        if (k && effectiveCrCl <= RENAL_MOD[k][2]) add(RENAL_MOD[k][0], `CrCl ${Math.round(effectiveCrCl)} mL/min: ` + RENAL_MOD[k][1]);
+        if (k && effectiveCrCl <= RENAL_MOD[k][2]) add("blue", `Sample CrCl ${Math.round(effectiveCrCl)} mL/min is at or below this name’s screening threshold (${RENAL_MOD[k][2]} mL/min). The label panel shows a retrieved sentence when one matches that band. No amount is restated here.`);
       }
       if (Number.isFinite(egfr) && egfr > 130 && /(cillin|cef|penem|aztreonam|vancomycin|gentamicin|amikacin|tobramycin)/.test(n)) {
-        add("amber", "Augmented renal clearance (eGFR >130): risk of subtherapeutic levels — consider extended/continuous infusion or more frequent dosing for time-dependent agents, with TDM.");
+        add("blue", "Sample eGFR is above 130, outside the ordinary-function band. Open the monograph for any sentence about higher clearance. This page does not recommend an infusion change.");
       }
       cur = "wt";
       if (A >= 18) {
@@ -5148,8 +5149,8 @@
         ? `${metric === "crcl" ? "CrCl" : "eGFR"} input selected: ${Math.round(value)} ${metric === "crcl" ? "mL/min" : "mL/min/1.73 m²"}.`
         : `${metric === "crcl" ? "CrCl" : "eGFR"} input selected; no value entered.`;
       if (metric === "egfr" && Number.isFinite(p.crcl)) status += ` Entered CrCl ${Math.round(p.crcl)} mL/min remains available for CrCl-specific branches.`;
-      if (derived) status += ` Equation result ${derived.value.toFixed(2)} ${derived.unit} (${derived.label}) selects the label regimen for this kidney function. eGFR was not converted into CrCl.`;
-      else if (AMUApp.isRenalCalculationActive?.() && !Number.isFinite(p.crcl) && !Number.isFinite(AMUApp.patient?.()[calculation?.result?.field || "crcl"])) status += " Complete the clearance calculator, or enter CrCl separately, so the labelled renal regimen can be selected.";
+      if (derived) status += ` Equation result ${derived.value.toFixed(2)} ${derived.unit} (${derived.label}) is the sample clearance compared with the monograph’s clearance bands. eGFR was not converted into CrCl. The comparison does not calculate a medicine amount.`;
+      else if (AMUApp.isRenalCalculationActive?.() && !Number.isFinite(p.crcl) && !Number.isFinite(AMUApp.patient?.()[calculation?.result?.field || "crcl"])) status += " Complete the clearance equation, or enter a sample CrCl, to match a clearance-band sentence. No medicine amount is calculated.";
       else if (canAssumeNormalRenalFunction(p)) status += ` No CrCl entered. eGFR ${Math.round(p.egfr)} is within 90–130 and dialysis is off, so the ordinary-function text branch is selected. No CrCl was calculated.`;
       else if (!Number.isFinite(p.crcl)) status += " CrCl-specific label sentences need a measured CrCl or the kidney-function equation. This eGFR value does not stand in for CrCl.";
       if (p.dialysis !== "none") status += ` Dialysis mode: ${p.dialysis.toUpperCase()}; no normal-function assumption.`;

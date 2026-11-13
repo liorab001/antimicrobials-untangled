@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 'use strict';
-/* Special kidney function must estimate the labelled clearance and select that regimen. */
+/* Special kidney function estimates the labelled clearance and shows the matching monograph sentence. */
 
 const assert = require('assert');
 const fs = require('fs');
@@ -59,10 +59,21 @@ function doseOf(result) {
   assert.strictEqual(policy.maximumScreenValue, 130);
   assert.strictEqual(policy.minimumScreenValue, 90);
   assert.ok(!/function activeCalculation\(\) \{\s*return null;/.test(integration), 'clearance selection is still stubbed');
-  assert.match(ui, /Augmented renal clearance \(eGFR >130\)/);
-  assert.match(ui, /Intermittent HD: /);
-  assert.match(ui, /do NOT apply the <30 reductions/);
-  assert.match(integration, /Renal-adjusted label regimen/);
+  assert.match(ui, /Sample eGFR is above 130/);
+  assert.match(ui, /Intermittent HD filter is on/);
+  assert.match(ui, /CRRT filter is on/);
+  assert.match(ui, /screening threshold/);
+  assert.doesNotMatch(ui, /do NOT apply the <30 reductions/);
+  assert.doesNotMatch(ui, /consider extended\/continuous infusion/);
+  assert.doesNotMatch(ui, /Intermittent HD: /);
+  assert.doesNotMatch(ui, /App renal screening caution/);
+  assert.match(integration, /Monograph sentences in this clearance band/);
+  assert.match(integration, /Matched label sentence/);
+  assert.match(integration, /does not state a dose to give/);
+  assert.doesNotMatch(integration, /Adjusted dose/);
+  assert.doesNotMatch(integration, /replaced by renal regimen/);
+  assert.doesNotMatch(integration, /selects the label row/);
+  assert.doesNotMatch(integration, /superseded:normal/);
 
   const engine = new AMUEngine(database);
   await engine.validate();

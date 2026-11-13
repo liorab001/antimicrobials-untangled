@@ -4245,7 +4245,7 @@
       } else if (profileSource === "formulation_specific_review") {
         bullets.push({ color: "blue", tag: "Formulation-specific renal review", text: renalProfile.adjustedDose });
       } else if (profileSource === "legacy_matrix") {
-        bullets.push({ color: "amber", tag: "Legacy app renal reference (not FDA-label-derived)", text: renalProfile.adjustedDose });
+        bullets.push({ color: "amber", tag: "Stored renal note withheld", text: "A stored renal amount for this name is not shown. Open the retrieved monograph." });
       } else if (renalProfile?.contraLevel?.includes("SAFE")) {
         bullets.push({ color: "emerald", tag: "No Flag Detected in Parsed Text", text: "Retrieved text matched a phrase about no renal dose adjustment. Open the monograph. This flag does not state that a regimen is appropriate." });
       } else {
@@ -4904,9 +4904,7 @@
       if (A < 0.08 && /ceftriaxone/.test(n)) add("red", "Neonate: contraindicated in hyperbilirubinemic/premature neonates and in neonates ≤28 d receiving calcium-containing IV fluids (FDA label).");
       if (A < 0.17 && /sulfamethoxazole/.test(n)) add("red", "Infant <2 months: contraindicated (FDA label).");
       if (A < 18) {
-        const pk = isCombinationProductName(d.activeIngredientSource || d.genericName) ? null : Object.keys(PED_DOSE).find(x => U.includes(x));
         if (A < 0.25) add("blue", "Under 3 months: the label uses age and gestation. This sandbox does not compute an amount.");
-        else if (pk) add("blue", "Label mg/kg text, not a calculated amount: " + PED_DOSE[pk]());
         else add("blue", "Pediatric label text is weight-based. This sandbox does not multiply the entered weight into a milligram amount.");
         const s = extractCleanSentence(d.rawRenalPop, "pediatric", 230);
         if (s && /pediatric|children|infant|neonat/i.test(s)) add("blue", "FDA pediatric text: " + s);
@@ -5141,18 +5139,14 @@
     }
     function updateRenalMetricStatus() {
       const p = getActiveDosingPhysiology();
-      const calculation = AMUApp.calculation?.();
-      const derived = calculation?.status === "resolved" ? calculation.result : null;
       const metric = renalMetricMode();
       const value = metric === "crcl" ? p.crcl : p.egfr;
       let status = Number.isFinite(value)
         ? `${metric === "crcl" ? "CrCl" : "eGFR"} input selected: ${Math.round(value)} ${metric === "crcl" ? "mL/min" : "mL/min/1.73 m²"}.`
         : `${metric === "crcl" ? "CrCl" : "eGFR"} input selected; no value entered.`;
       if (metric === "egfr" && Number.isFinite(p.crcl)) status += ` Entered CrCl ${Math.round(p.crcl)} mL/min remains available for CrCl-specific branches.`;
-      if (derived) status += ` Equation result ${derived.value.toFixed(2)} ${derived.unit} (${derived.label}) is the sample clearance compared with the monograph’s clearance bands. eGFR was not converted into CrCl. The comparison does not calculate a medicine amount.`;
-      else if (AMUApp.isRenalCalculationActive?.() && !Number.isFinite(p.crcl) && !Number.isFinite(AMUApp.patient?.()[calculation?.result?.field || "crcl"])) status += " Complete the clearance equation, or enter a sample CrCl, to match a clearance-band sentence. No medicine amount is calculated.";
       else if (canAssumeNormalRenalFunction(p)) status += ` No CrCl entered. eGFR ${Math.round(p.egfr)} is within 90–130 and dialysis is off, so the ordinary-function text branch is selected. No CrCl was calculated.`;
-      else if (!Number.isFinite(p.crcl)) status += " CrCl-specific label sentences need a measured CrCl or the kidney-function equation. This eGFR value does not stand in for CrCl.";
+      else if (!Number.isFinite(p.crcl)) status += " CrCl-specific label sentences need a typed CrCl. This eGFR value does not stand in for CrCl, and this page does not estimate one.";
       if (p.dialysis !== "none") status += ` Dialysis mode: ${p.dialysis.toUpperCase()}; no normal-function assumption.`;
       $id("renalMetricStatus").textContent = status;
     }

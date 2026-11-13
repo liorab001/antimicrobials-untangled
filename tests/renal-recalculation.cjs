@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 'use strict';
-/* Special kidney function estimates the labelled clearance and shows the matching monograph sentence. */
+/* Typed clearance selects the matching monograph sentence. The page does not run a clearance equation. */
 
 const assert = require('assert');
 const fs = require('fs');
@@ -58,7 +58,11 @@ function doseOf(result) {
 (async () => {
   assert.strictEqual(policy.maximumScreenValue, 130);
   assert.strictEqual(policy.minimumScreenValue, 90);
-  assert.ok(!/function activeCalculation\(\) \{\s*return null;/.test(integration), 'clearance selection is still stubbed');
+  assert.ok(/function activeCalculation\(\) \{\s*\/\/ Typed filters select monograph sentences\.[\s\S]*return null;/.test(integration), 'the page still selects a clearance equation');
+  assert.doesNotMatch(integration, /Kidney-function equation/);
+  assert.doesNotMatch(integration, /from the label equation/);
+  assert.doesNotMatch(ui, /kidney-function equation/);
+  assert.doesNotMatch(ui, /Label mg\/kg text, not a calculated amount/);
   assert.match(ui, /Sample eGFR is above 130/);
   assert.match(ui, /Intermittent HD filter is on/);
   assert.match(ui, /CRRT filter is on/);
@@ -122,10 +126,10 @@ function doseOf(result) {
   assert.strictEqual(api.normalRenalDefaults({ ...base, egfr: 131 }), false);
   assert.strictEqual(api.normalRenalDefaults({ ...base, dialysis: 'hd' }), false);
   assert.strictEqual(api.activeCalculation(base), null);
-  assert.strictEqual(api.activeCalculation({ ...base, egfr: 40 }).id, 'cockcroft_gault');
-  assert.strictEqual(api.activeCalculation({ ...base, egfr: 140 }).id, 'cockcroft_gault');
+  assert.strictEqual(api.activeCalculation({ ...base, egfr: 40 }), null);
+  assert.strictEqual(api.activeCalculation({ ...base, egfr: 140 }), null);
   assert.strictEqual(api.activeCalculation({ ...base, egfr: 40, dialysis: 'hd' }), null);
-  assert.strictEqual(api.activeCalculation({ ...base, serum_creatinine: 1.2 }).id, 'cockcroft_gault');
+  assert.strictEqual(api.activeCalculation({ ...base, serum_creatinine: 1.2 }), null);
 
   const pediatric = decisions(
     { database },
@@ -134,7 +138,7 @@ function doseOf(result) {
     [{ genericName: 'Cefdinir' }],
     (drug, name) => drug.genericName.toLowerCase() === name.toLowerCase()
   );
-  assert.strictEqual(pediatric.activeCalculation({ age: 8, weight: 25, dialysis: 'none', egfr: 40, indexed_clearance: null, serum_creatinine: null }).id, 'cefdinir_label_pediatric_clearance');
+  assert.strictEqual(pediatric.activeCalculation({ age: 8, weight: 25, dialysis: 'none', egfr: 40, indexed_clearance: null, serum_creatinine: null }), null);
 
   const sourceWeight = decisions(
     { database },
@@ -143,7 +147,7 @@ function doseOf(result) {
     [{ genericName: 'Adefovir' }],
     (drug, name) => drug.genericName.toLowerCase() === name.toLowerCase()
   );
-  assert.strictEqual(sourceWeight.activeCalculation({ ...base, egfr: 40 }).id, 'cockcroft_gault_source_weight');
+  assert.strictEqual(sourceWeight.activeCalculation({ ...base, egfr: 40 }), null);
   engine.dispose();
   console.log('renal recalculation checks passed');
 })().catch(error => {

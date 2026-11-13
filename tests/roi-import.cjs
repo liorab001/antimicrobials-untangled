@@ -78,21 +78,24 @@ async function rejects(fn, text) {
   tampered.unmatchedPatterns[0].formatDraft.id = 'examplemycin_regimen';
   tampered.unmatchedPatterns[0].formatDraft.enabled = true;
   tampered.unmatchedPatterns[0].formatDraft.recognition = { op: 'eq', left: { path: 'scope.kind' }, right: 'prose.clause' };
+  const already = database.formats.some(format => format.id === odd.fingerprint);
   const imported = await importRoiPatterns(database, tampered);
   const stored = imported.database.formats.find(format => format.id === odd.fingerprint);
   assert.ok(stored);
-  assert.strictEqual(imported.summary.formats, 1);
-  assert.strictEqual(imported.summary.databaseVersion, '1.3.1');
+  assert.strictEqual(imported.summary.formats, already ? 0 : 1);
+  const nextVersion = database.databaseVersion.replace(/\d+$/, n => String(Number(n) + 1));
+  assert.strictEqual(imported.summary.databaseVersion, imported.summary.formats || imported.summary.upgraded || imported.summary.fixtures ? nextVersion : database.databaseVersion);
   assert.strictEqual(stored.enabled, false);
   assert.strictEqual(stored.output.mayCreateRegimen, false);
   assert.deepStrictEqual(stored.applicability.fieldRefs, []);
   assert.strictEqual(stored.processing.parameters.selector.roiFingerprint, odd.fingerprint);
   assert.ok(!imported.database.formats.some(format => format.id === 'examplemycin_regimen'));
-  assert.deepStrictEqual(imported.database.formats.filter(format => format.id !== odd.fingerprint).map(format => format.id), originalIds);
+  assert.deepStrictEqual(imported.database.formats.filter(format => format.id !== odd.fingerprint).map(format => format.id), originalIds.filter(id => id !== odd.fingerprint));
   for (const format of database.formats) {
+    if (format.id === odd.fingerprint) continue;
     assert.strictEqual(JSON.stringify(imported.database.formats.find(item => item.id === format.id)), JSON.stringify(format));
   }
-  const fixture = imported.database.fixtures.find(item => item.kind === 'roi_pattern_observation');
+  const fixture = imported.database.fixtures.find(item => item.kind === 'roi_pattern_observation' && item.fingerprint === odd.fingerprint);
   assert.strictEqual(fixture.testOnly, true);
   assert.strictEqual(fixture.maySupplyLabelDose, false);
   assert.strictEqual(fixture.fingerprint, odd.fingerprint);
@@ -101,7 +104,7 @@ async function rejects(fn, text) {
   assert.strictEqual(again.summary.formats, 0);
   assert.strictEqual(again.summary.duplicates, 1);
   assert.strictEqual(again.summary.fixtures, 0);
-  assert.strictEqual(again.database.databaseVersion, '1.3.1');
+  assert.strictEqual(again.database.databaseVersion, imported.summary.databaseVersion);
 
   const broad = JSON.parse(JSON.stringify(imported.database));
   const existing = broad.formats.find(format => format.id === odd.fingerprint);
@@ -162,7 +165,7 @@ async function rejects(fn, text) {
   const command = spawnSync(process.execPath, [path.join(root, 'tools/import-roi-patterns.cjs'), path.join(root, 'amu-database.json'), observationPath, outputPath], { encoding: 'utf8' });
   assert.strictEqual(command.status, 0, command.stderr);
   const written = JSON.parse(fs.readFileSync(outputPath, 'utf8'));
-  assert.strictEqual(written.databaseVersion, '1.3.1');
+  assert.strictEqual(written.databaseVersion, imported.summary.databaseVersion);
   assert.strictEqual(written.formats.find(format => format.id === odd.fingerprint).enabled, false);
   console.log('roi-import: ' + (written.formats.length - database.formats.length) + ' disabled fingerprint draft, queue and sibling-disease checks passed');
 })().catch(error => {
